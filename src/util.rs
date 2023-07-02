@@ -1,0 +1,1 @@
+pub struct Arg<const NAME: &'static str, T>(pub T);
