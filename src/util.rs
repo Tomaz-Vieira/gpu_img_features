@@ -40,8 +40,10 @@ impl Extent3dExt for wgpu::Extent3d{
     }
     fn to_buffer_size(&self, num_channels: NumChannels) -> BufferSize{
         let num_chanels_u32: u32 = num_channels.into();
+        let bytes_per_channel = 4;
+
         BufferSize::from(
-            self.width * self.height * self.depth_or_array_layers * num_chanels_u32
+            self.width * self.height * self.depth_or_array_layers * num_chanels_u32 * bytes_per_channel
         )
     }
 }
@@ -114,5 +116,10 @@ impl Into<u64> for BufferSize{
 impl Into<NonZeroU64> for BufferSize{
     fn into(self) -> NonZeroU64 {
         return self.0
+    }
+}
+impl Display for BufferSize{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

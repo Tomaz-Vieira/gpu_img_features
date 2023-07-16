@@ -33,6 +33,9 @@ fn main() {
     let img = image::io::Reader::open("./c_cells_1.png").unwrap().decode().unwrap();
     let img_rgba8 = img.to_rgba8();
 
+    let dims = img_rgba8.dimensions();
+    println!("Image has these dimensions:{:?} ", dims);
+
     let pipeline = FeatureExtractorPipeline::new(
         &device,
         Arg::<"tile_size", _>(img_rgba8.extent()),

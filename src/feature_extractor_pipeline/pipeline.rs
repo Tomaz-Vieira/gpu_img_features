@@ -106,12 +106,13 @@ impl FeatureExtractorPipeline{
         let input_texture = self.input_texture_slot.create_texture(device, image.extent());
         input_texture.write_texture(queue, image);
 
-        let output_buffer = {
-            //FIXME: right now we are hardcoding that the output has 4 channels
-            let num_channels = NumChannels(NonZeroU8::new(4).unwrap());
-            let output_buffer_size = image.extent().to_buffer_size(num_channels);
-            self.output_buffer_slot.create_buffer(device, output_buffer_size)
-        };
+        //FIXME: right now we are hardcoding that the output has 4 channels
+        let num_channels = NumChannels(NonZeroU8::new(4).unwrap());
+        let output_buffer_size = image.extent().to_buffer_size(num_channels);
+        println!("Output buffer will have {output_buffer_size} bytes");
+        let output_buffer = self.output_buffer_slot.create_buffer(device, output_buffer_size);
+        let read_buffer = output_buffer.create_read_buffer(device, output_buffer_size);
+
 
         let bind_group = device.create_bind_group(&BindGroupDescriptor{
             label: Some("binding_for_filter_pipeline"),
@@ -126,15 +127,33 @@ impl FeatureExtractorPipeline{
             label: Some("my_encoder_for_filtering")
         });
 
-        let mut compute_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor{
-            label: Some("my_compute_pass")
-        });
-        compute_pass.set_pipeline(&self.pipeline);
-        compute_pass.set_bind_group(0, &bind_group, &[]);
-        let (x,y,z) = image.extent().num_dispatch_work_groups(&self.workgroup_size);
-        compute_pass.dispatch_workgroups(x, y, z);
-        drop(compute_pass); //FIXME?: forcing pass to end here, I hope
+        {
+            let mut compute_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor{
+                label: Some("my_compute_pass")
+            });
+            compute_pass.set_pipeline(&self.pipeline);
+            compute_pass.set_bind_group(0, &bind_group, &[]);
+            let (x,y,z) = image.extent().num_dispatch_work_groups(&self.workgroup_size);
+            compute_pass.dispatch_workgroups(x, y, z);
+            // drop(compute_pass); //FIXME?: forcing pass to end here, I hope
+        }
 
+        command_encoder.copy_buffer_to_buffer(output_buffer.raw(), 0, &read_buffer, 0, output_buffer_size.into());
+        let buffer_slice = read_buffer.slice(..);
+        buffer_slice.map_async(wgpu::MapMode::Read, |_| {println!("buffer is mapped!")});
+
+        queue.submit([command_encoder.finish()]);
+        device.poll(wgpu::Maintain::Wait);
+
+        let mapped_range = buffer_slice.get_mapped_range();
+
+        {
+            if let Some(out_img) = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(image.width(), image.height(), mapped_range){
+                out_img.save("blurred.png").unwrap();
+            }else{
+                println!("Could not make image from result!")
+            };
+        }
 
 
         // command_encoder.copy_texture_to_buffer(
