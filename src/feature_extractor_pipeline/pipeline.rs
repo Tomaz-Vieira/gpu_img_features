@@ -154,16 +154,5 @@ impl FeatureExtractorPipeline{
                 println!("Could not make image from result!")
             };
         }
-
-
-        // command_encoder.copy_texture_to_buffer(
-        //     self.output_texture_slot.texture().as_image_copy(),
-        //     wgpu::ImageCopyBuffer{
-        //         buffer: &output_buffer,
-        //         layout:
-        //     },
-        //     copy_size
-        // );
-
     }
 }

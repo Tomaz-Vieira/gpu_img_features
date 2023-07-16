@@ -12,8 +12,6 @@ use crate::{feature_extractor_pipeline::pipeline::FeatureExtractorPipeline, util
 
 
 fn main() {
-    println!("Hello, world!");
-
     let instance = Instance::new(InstanceDescriptor{
         backends: Backends::VULKAN,
         dx12_shader_compiler: wgpu::Dx12Compiler::default(),
