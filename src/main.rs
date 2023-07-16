@@ -4,9 +4,11 @@ pub mod feature_extractor_pipeline;
 pub mod util;
 
 use wgpu::{
-    Instance, InstanceDescriptor, Backends, RequestAdapterOptions, PipelineLayoutDescriptor, BindGroupLayout,
+    Instance, InstanceDescriptor, Backends, RequestAdapterOptions,
 };
 use pollster::FutureExt;
+
+use crate::{feature_extractor_pipeline::pipeline::FeatureExtractorPipeline, util::{ImageBufferExt, WorkgroupSize, Arg}};
 
 
 fn main() {
@@ -27,8 +29,20 @@ fn main() {
         .request_device(&Default::default(), None)
         .block_on().unwrap();
 
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("my_encoder")});
-    let compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor{label: Some("my_compute_pass")});
-    // compute_pass.set
 
+    let img = image::io::Reader::open("./c_cells_1.png").unwrap().decode().unwrap();
+    let img_rgba8 = img.to_rgba8();
+
+    let pipeline = FeatureExtractorPipeline::new(
+        &device,
+        Arg::<"tile_size", _>(img_rgba8.extent()),
+        WorkgroupSize{
+            x: 16,
+            y: 16,
+            z: 1,
+        }
+    );
+
+
+    pipeline.process(&device, &queue, &img_rgba8);
 }

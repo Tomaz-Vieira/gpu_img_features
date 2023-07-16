@@ -1,63 +1,78 @@
-use wgpu::{ShaderModuleDescriptor, BindGroupLayoutDescriptor};
+use std::num::NonZeroU8;
 
-use super::texture_slots::{InputTextureSlot, OutpuTextureSlot, Group, Binding};
+use wgpu::{ShaderModuleDescriptor, BindGroupLayoutDescriptor, BindGroupDescriptor};
 
-pub struct FeatureExtractorPipelineLayout{
+use crate::util::{Arg, WorkgroupSize, ImageBufferExt, Extent3dExt, Group, Binding, NumChannels};
+
+use super::{input_texture::InputTextureSlot, output_buffer::OutputBufferSlot};
+
+pub struct FeatureExtractorPipeline{
     input_texture_slot: InputTextureSlot,
-    output_texture_slot: OutpuTextureSlot,
-    shader_module: wgpu::ShaderModule,
+    output_buffer_slot: OutputBufferSlot,
+    workgroup_size: WorkgroupSize,
     slots_bind_group_layout: wgpu::BindGroupLayout,
-    pipeline_layout: wgpu::PipelineLayout,
+    pipeline: wgpu::ComputePipeline,
 }
-impl FeatureExtractorPipelineLayout{
-    pub fn new(device: &wgpu::Device) -> Self{
+impl FeatureExtractorPipeline{
+    pub fn new(
+        device: &wgpu::Device,
+        Arg(tile_size): Arg<"tile_size", wgpu::Extent3d>,
+        workgroup_size: WorkgroupSize,
+    ) -> Self{
+        let input_texture_view_dimension = match tile_size.depth_or_array_layers{
+            1 => wgpu::TextureViewDimension::D2,
+            _ => wgpu::TextureViewDimension::D3,
+        };
+
         let input_texture_slot = InputTextureSlot::new(
             "input_image".into(),
             Group(0),
             Binding(0),
             wgpu::TextureSampleType::Float { filterable: false },
-            wgpu::TextureViewDimension::D2,
+            input_texture_view_dimension,
         );
-        let input_name = input_texture_slot.name();
 
-        let output_texture_slot = OutpuTextureSlot::new(
+        let output_buffer_slot = OutputBufferSlot::new(
             "output_features".into(),
             Group(0),
             Binding(1),
-            wgpu::TextureFormat::Rgba8Unorm,
-            wgpu::TextureViewDimension::D2,
         );
-        let output_name = output_texture_slot.name();
+
+        let input_name = input_texture_slot.name();
+        let output_name = output_buffer_slot.name();
+        let shader_code = format!("
+            {input_texture_slot}
+            {output_buffer_slot}
+
+            @compute {workgroup_size}
+            fn extract_features(
+                @builtin(global_invocation_id) global_id : vec3<u32>,
+            ) {{
+                let dimensions = textureDimensions({input_name});
+                let coords = global_id.xy;
+
+                if(coords.x >= dimensions.x || coords.y >= dimensions.y) {{
+                    return;
+                }}
+
+                let color = textureLoad({input_name}, coords.xy, 0);
+                let gray = dot(vec3<f32>(0.299, 0.587, 0.114), color.rgb);
+
+                {output_name}[coords.y * dimensions.x + coords.x] = vec4<f32>(gray, gray, gray, color.a);
+            }}
+        ");
+        println!("{}", shader_code);
 
         let shader_module = device.create_shader_module(ShaderModuleDescriptor{
             label: Some("feature_extractor_comp_shader"),
-            source: wgpu::ShaderSource::Wgsl(format!("
-                {input_texture_slot}
-                {output_texture_slot}
-
-                @compute @workgroup_size(16, 16)
-                fn grayscale_main(
-                    @builtin(global_invocation_id) global_id : vec3<u32>,
-                ) {{
-                    let dimensions = textureDimensions({input_name});
-                    let coords = vec2<i32>(global_id.xy);
-
-                    if(coords.x >= dimensions.x || coords.y >= dimensions.y) {{
-                        return;
-                    }}
-
-                    let color = textureLoad({input_name}, coords.xy, 0);
-                    let gray = dot(vec3<f32>(0.299, 0.587, 0.114), color.rgb);
-
-                    textureStore({output_name}, coords.xy, vec4<f32>(gray, gray, gray, color.a));
-                }}
-            ").into())
+            source: wgpu::ShaderSource::Wgsl(shader_code.into())
         });
 
         let slots_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor{
             label: Some("feature_Extractor_slots_group_layout"),
             entries: &[
-                input_texture_slot.to_bind_group_layout_entry(), output_texture_slot.to_bind_group_layout_entry(),
+                input_texture_slot.to_bind_group_layout_entry(),
+                output_buffer_slot.to_bind_group_layout_entry(),
             ]
         });
 
@@ -70,7 +85,66 @@ impl FeatureExtractorPipelineLayout{
         });
 
         Self{
-            input_texture_slot, output_texture_slot, shader_module, slots_bind_group_layout, pipeline_layout
+            input_texture_slot,
+            output_buffer_slot,
+            workgroup_size,
+            slots_bind_group_layout,
+            pipeline: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor{
+                label: Some("my_pipeline"),
+                entry_point: "extract_features",
+                layout: Some(&pipeline_layout),
+                module: &shader_module,
+            }),
         }
+    }
+    pub fn process(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        image: &image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+    )/* -> image::ImageBuffer<image::Rgba<u8>, Vec<u8>> */{
+        let input_texture = self.input_texture_slot.create_texture(device, image.extent());
+        input_texture.write_texture(queue, image);
+
+        let output_buffer = {
+            //FIXME: right now we are hardcoding that the output has 4 channels
+            let num_channels = NumChannels(NonZeroU8::new(4).unwrap());
+            let output_buffer_size = image.extent().to_buffer_size(num_channels);
+            self.output_buffer_slot.create_buffer(device, output_buffer_size)
+        };
+
+        let bind_group = device.create_bind_group(&BindGroupDescriptor{
+            label: Some("binding_for_filter_pipeline"),
+            layout: &self.slots_bind_group_layout,
+            entries: &[
+                input_texture.to_bind_group_entry(),
+                output_buffer.to_bind_group_entry(),
+            ],
+        });
+
+        let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor{
+            label: Some("my_encoder_for_filtering")
+        });
+
+        let mut compute_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor{
+            label: Some("my_compute_pass")
+        });
+        compute_pass.set_pipeline(&self.pipeline);
+        compute_pass.set_bind_group(0, &bind_group, &[]);
+        let (x,y,z) = image.extent().num_dispatch_work_groups(&self.workgroup_size);
+        compute_pass.dispatch_workgroups(x, y, z);
+        drop(compute_pass); //FIXME?: forcing pass to end here, I hope
+
+
+
+        // command_encoder.copy_texture_to_buffer(
+        //     self.output_texture_slot.texture().as_image_copy(),
+        //     wgpu::ImageCopyBuffer{
+        //         buffer: &output_buffer,
+        //         layout:
+        //     },
+        //     copy_size
+        // );
+
     }
 }

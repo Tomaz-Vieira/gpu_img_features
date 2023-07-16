@@ -1,0 +1,82 @@
+use std::fmt::Display;
+
+use crate::util::{Group, Binding, BufferSize};
+
+pub struct OutputBuffer{
+    binding: Binding,
+    buffer: wgpu::Buffer,
+    size: BufferSize,
+}
+impl OutputBuffer{
+    pub fn create_read_buffer(&self, device: &wgpu::Device, size: u64) -> wgpu::Buffer{
+        device.create_buffer(&wgpu::BufferDescriptor{
+            label: Some("my_read_buffer_for"),
+            mapped_at_creation: false,
+            size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        })
+    }
+    pub fn to_bind_group_entry(&self) -> wgpu::BindGroupEntry{
+        wgpu::BindGroupEntry{
+            binding: self.binding.into(),
+            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding{
+                buffer: &self.buffer,
+                offset: 0,
+                size: Some(self.size.into()), //FIXME?
+            })
+        }
+    }
+}
+
+pub struct OutputBufferSlot{
+    name: String,
+    group: Group,
+    binding: Binding,
+}
+impl OutputBufferSlot{
+    pub fn new(name: String, group: Group, binding: Binding) -> Self{
+        Self{name, group, binding}
+    }
+    pub fn create_buffer(&self, device: &wgpu::Device, size: BufferSize) -> OutputBuffer{
+        let name = &self.name;
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor{
+            label: Some(&format!("output_buffer__{name}")),
+            mapped_at_creation: false,
+            size: size.into(),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+        return OutputBuffer { buffer, size, binding: self.binding }
+    }
+    pub fn name(&self) -> &str{
+        return &self.name
+    }
+    pub fn to_wgsl_declaration(&self) -> String{
+        let name = &self.name;
+        let group = &self.group;
+        let binding = &self.binding;
+        format!(
+            "@group({group}) @binding({binding}) var<storage, write> {name} : array<vec4<f32>>;"
+        )
+    }
+    pub fn to_binding_type(&self) -> wgpu::BindingType{
+        wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: false },
+            has_dynamic_offset: false,
+            min_binding_size: None, //FIXME?
+        }
+    }
+    pub fn to_bind_group_layout_entry(&self) -> wgpu::BindGroupLayoutEntry{
+        return wgpu::BindGroupLayoutEntry{
+            binding: self.binding.into(),
+            count: None,
+            ty: self.to_binding_type(),
+            visibility: wgpu::ShaderStages::COMPUTE,
+        }
+    }
+
+}
+impl Display for OutputBufferSlot{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_wgsl_declaration())
+    }
+}
