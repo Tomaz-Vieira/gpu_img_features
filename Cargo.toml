@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 pollster = "0.3.0"
 image = "0.24.6"
+bytemuck = "1.13.1"
 
 [dependencies.wgpu]
 path = "/home/builder/source/wgpu/wgpu"

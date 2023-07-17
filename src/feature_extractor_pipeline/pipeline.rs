@@ -111,7 +111,7 @@ impl FeatureExtractorPipeline{
         let output_buffer_size = image.extent().to_buffer_size(num_channels);
         println!("Output buffer will have {output_buffer_size} bytes");
         let output_buffer = self.output_buffer_slot.create_buffer(device, output_buffer_size);
-        let read_buffer = output_buffer.create_read_buffer(device, output_buffer_size);
+        let read_buffer = output_buffer.create_read_buffer(device);
 
 
         let bind_group = device.create_bind_group(&BindGroupDescriptor{
@@ -139,20 +139,48 @@ impl FeatureExtractorPipeline{
         }
 
         command_encoder.copy_buffer_to_buffer(output_buffer.raw(), 0, &read_buffer, 0, output_buffer_size.into());
-        let buffer_slice = read_buffer.slice(..);
-        buffer_slice.map_async(wgpu::MapMode::Read, |_| {println!("buffer is mapped!")});
 
-        queue.submit([command_encoder.finish()]);
+
+        queue.submit(Some(command_encoder.finish()));
+
+        let buffer_slice = read_buffer.slice(..);
+        buffer_slice.map_async(wgpu::MapMode::Read, move |_| {
+            //FIXME: check result and, if successul, set a condvar or something
+            println!("buffer is mapped!");
+        });
+
         device.poll(wgpu::Maintain::Wait);
 
-        let mapped_range = buffer_slice.get_mapped_range();
 
-        {
-            if let Some(out_img) = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(image.width(), image.height(), mapped_range){
-                out_img.save("blurred.png").unwrap();
-            }else{
-                println!("Could not make image from result!")
-            };
-        }
+        // Gets contents of buffer
+        let data = buffer_slice.get_mapped_range();
+        println!("Copying data from buffer into CPU...........");
+        let data_cpy: Vec<u8> = bytemuck::cast_slice::<_, f32>(&data).iter().map(|channel| (channel * 255.0) as u8 ).collect();
+
+        if let Some(out_img) = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(image.width(), image.height(), data_cpy){
+            out_img.save("blurred.png").unwrap();
+        }else{
+            println!("Could not make image from result!")
+        };
+
+        // With the current interface, we have to make sure all mapped views are
+        // dropped before we unmap the buffer.
+        drop(data);
+        read_buffer.unmap(); // Unmaps buffer from memory
+                                // If you are familiar with C++ these 2 lines can be thought of similarly to:
+                                //   delete myPointer;
+                                //   myPointer = NULL;
+                                // It effectively frees the memory
+
+
+        // let mapped_range = buffer_slice.get_mapped_range();
+
+        // {
+        //     if let Some(out_img) = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(image.width(), image.height(), mapped_range){
+        //         out_img.save("blurred.png").unwrap();
+        //     }else{
+        //         println!("Could not make image from result!")
+        //     };
+        // }
     }
 }

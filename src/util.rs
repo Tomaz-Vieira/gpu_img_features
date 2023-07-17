@@ -102,6 +102,13 @@ impl Into<u32> for NumChannels{
 
 #[derive(Copy, Clone)]
 pub struct BufferSize(NonZeroU64);
+impl BufferSize{
+    pub fn padded(&self) -> Self{
+        let size = u64::from(self.0);
+        let missing_padding = size % 256;
+        return BufferSize(NonZeroU64::new(size + missing_padding).unwrap());
+    }
+}
 impl From<u32> for BufferSize{
     fn from(value: u32) -> Self {
         let v = u64::from(value);

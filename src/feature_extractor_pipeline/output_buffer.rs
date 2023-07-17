@@ -8,11 +8,11 @@ pub struct OutputBuffer{
     size: BufferSize,
 }
 impl OutputBuffer{
-    pub fn create_read_buffer(&self, device: &wgpu::Device, size: BufferSize) -> wgpu::Buffer{
+    pub fn create_read_buffer(&self, device: &wgpu::Device) -> wgpu::Buffer{
         device.create_buffer(&wgpu::BufferDescriptor{
             label: Some("my_read_buffer_for"),
             mapped_at_creation: false,
-            size: size.into(),
+            size: self.size.padded().into(),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         })
     }
@@ -45,7 +45,7 @@ impl OutputBufferSlot{
         let buffer = device.create_buffer(&wgpu::BufferDescriptor{
             label: Some(&format!("output_buffer__{name}")),
             mapped_at_creation: false,
-            size: size.into(),
+            size: size.padded().into(),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
         });
         return OutputBuffer { buffer, size, binding: self.binding }
