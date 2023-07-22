@@ -100,33 +100,24 @@ impl Into<u32> for NumChannels{
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct BufferSize(NonZeroU64);
+#[derive(Copy, Clone, Debug)]
+pub struct BufferSize{
+    requested_size: NonZeroU64,
+    padded_size: NonZeroU64,
+}
+
 impl BufferSize{
-    pub fn padded(&self) -> Self{
-        let size = u64::from(self.0);
-        let missing_padding = size % 256;
-        return BufferSize(NonZeroU64::new(size + missing_padding).unwrap());
+    pub fn new(requested_size: NonZeroU64) -> Self{
+        let missing_padding = u64::from(requested_size) % 256; //FIXME: use BIND_BUFFER_ALIGNMENT
+        let padded_size = NonZeroU64::new(u64::from(requested_size) + missing_padding).unwrap();
+        return Self{requested_size, padded_size}
     }
+    pub fn requested_size(&self) -> NonZeroU64{ self.requested_size }
+    pub fn padded_size(&self) -> NonZeroU64{ self.padded_size }
 }
 impl From<u32> for BufferSize{
     fn from(value: u32) -> Self {
         let v = u64::from(value);
-        return Self(NonZeroU64::try_from(v).unwrap())
-    }
-}
-impl Into<u64> for BufferSize{
-    fn into(self) -> u64 {
-        return self.0.into()
-    }
-}
-impl Into<NonZeroU64> for BufferSize{
-    fn into(self) -> NonZeroU64 {
-        return self.0
-    }
-}
-impl Display for BufferSize{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        return Self::new(NonZeroU64::try_from(v).unwrap())
     }
 }

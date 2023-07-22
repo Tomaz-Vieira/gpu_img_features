@@ -2,7 +2,7 @@ use std::num::NonZeroU8;
 
 use wgpu::{ShaderModuleDescriptor, BindGroupLayoutDescriptor, BindGroupDescriptor};
 
-use crate::util::{Arg, WorkgroupSize, ImageBufferExt, Extent3dExt, Group, Binding, NumChannels};
+use crate::{util::{Arg, WorkgroupSize, ImageBufferExt, Extent3dExt, Group, Binding, NumChannels}, feature_extractor_pipeline::reader_buffer::ReaderBuffer};
 
 use super::{input_texture::InputTextureSlot, output_buffer::OutputBufferSlot};
 
@@ -109,9 +109,9 @@ impl FeatureExtractorPipeline{
         //FIXME: right now we are hardcoding that the output has 4 channels
         let num_channels = NumChannels(NonZeroU8::new(4).unwrap());
         let output_buffer_size = image.extent().to_buffer_size(num_channels);
-        println!("Output buffer will have {output_buffer_size} bytes");
+        println!("Output buffer will have {output_buffer_size:?} bytes");
         let output_buffer = self.output_buffer_slot.create_buffer(device, output_buffer_size);
-        let read_buffer = output_buffer.create_read_buffer(device);
+        let read_buffer = ReaderBuffer::create_for(&output_buffer, "my_read_buffer", device);
 
 
         let bind_group = device.create_bind_group(&BindGroupDescriptor{
@@ -138,13 +138,11 @@ impl FeatureExtractorPipeline{
             // drop(compute_pass); //FIXME?: forcing pass to end here, I hope
         }
 
-        command_encoder.copy_buffer_to_buffer(output_buffer.raw(), 0, &read_buffer, 0, output_buffer_size.into());
-
+        read_buffer.encode_copy(&mut command_encoder, &output_buffer);
 
         queue.submit(Some(command_encoder.finish()));
 
-        let buffer_slice = read_buffer.slice(..);
-        buffer_slice.map_async(wgpu::MapMode::Read, move |_| {
+        read_buffer.map_async(wgpu::MapMode::Read, move |_| {
             //FIXME: check result and, if successul, set a condvar or something
             println!("buffer is mapped!");
         });
@@ -153,7 +151,7 @@ impl FeatureExtractorPipeline{
 
 
         // Gets contents of buffer
-        let data = buffer_slice.get_mapped_range();
+        let data = read_buffer.get_mapped_range();
         println!("Copying data from buffer into CPU...........");
         let data_cpy: Vec<u8> = bytemuck::cast_slice::<_, f32>(&data).iter().map(|channel| (channel * 255.0) as u8 ).collect();
 
