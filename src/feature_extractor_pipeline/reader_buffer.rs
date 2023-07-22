@@ -1,23 +1,19 @@
-use crate::util::BufferSize;
 
 use super::output_buffer::OutputBuffer;
 
-pub struct ReaderBuffer {
+pub struct ReaderBuffer<'source> {
     buffer: wgpu::Buffer,
-    size: BufferSize,
+    source: &'source OutputBuffer
 }
-impl ReaderBuffer {
-    pub fn new(name: &str, size: BufferSize, device: &wgpu::Device) -> Self {
+impl<'source> ReaderBuffer<'source> {
+    pub fn new(name: &str, source: &'source OutputBuffer, device: &wgpu::Device) -> Self {
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("read_buffer__{name}")),
             mapped_at_creation: false,
-            size: size.padded_size().into(),
+            size: source.size().padded_size().into(),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         });
-        return Self { buffer, size };
-    }
-    pub fn create_for(output_buffer: &OutputBuffer, name: &str, device: &wgpu::Device) -> Self{
-        return Self::new(name, output_buffer.size(), device)
+        return Self { buffer, source };
     }
     pub fn map_async(
         &self,
@@ -31,8 +27,8 @@ impl ReaderBuffer {
         let buffer_slice = self.buffer.slice(..); //FIXME
         buffer_slice.get_mapped_range()
     }
-    pub fn encode_copy(&self, encoder: &mut wgpu::CommandEncoder, source: &OutputBuffer){
-        encoder.copy_buffer_to_buffer(source.raw(), 0, &self.buffer, 0, source.size().padded_size().into());
+    pub fn encode_copy(&self, encoder: &mut wgpu::CommandEncoder){
+        encoder.copy_buffer_to_buffer(self.source.raw(), 0, &self.buffer, 0, self.source.size().padded_size().into());
     }
     pub fn unmap(&self){
         self.buffer.unmap()

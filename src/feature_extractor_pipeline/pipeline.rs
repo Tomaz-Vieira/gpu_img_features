@@ -111,7 +111,7 @@ impl FeatureExtractorPipeline{
         let output_buffer_size = image.extent().to_buffer_size(num_channels);
         println!("Output buffer will have {output_buffer_size:?} bytes");
         let output_buffer = self.output_buffer_slot.create_buffer(device, output_buffer_size);
-        let read_buffer = ReaderBuffer::create_for(&output_buffer, "my_read_buffer", device);
+        let read_buffer = ReaderBuffer::new("my_read_buffer", &output_buffer, device);
 
 
         let bind_group = device.create_bind_group(&BindGroupDescriptor{
@@ -138,7 +138,7 @@ impl FeatureExtractorPipeline{
             // drop(compute_pass); //FIXME?: forcing pass to end here, I hope
         }
 
-        read_buffer.encode_copy(&mut command_encoder, &output_buffer);
+        read_buffer.encode_copy(&mut command_encoder);
 
         queue.submit(Some(command_encoder.finish()));
 
