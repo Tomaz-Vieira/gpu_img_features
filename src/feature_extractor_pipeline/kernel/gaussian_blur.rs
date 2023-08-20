@@ -1,16 +1,15 @@
-use super::{AccumulatorVar, SampleVar};
+use super::{AccumulatorVar, SampleVar, CenterOffset};
 
 pub struct GaussianBlur{
-    sigma: f32,
-    accumulator_var: AccumulatorVar,
+    pub sigma: f32,
+    pub max_offset: u8,
 }
 
 impl GaussianBlur{
-    pub fn new(sigma: f32, accumulator_var: AccumulatorVar) -> Self{
-        return Self{sigma, accumulator_var}
+    pub fn make_accumulator_var(&self) -> AccumulatorVar{
+        return AccumulatorVar(format!("GaussianBlur_accum_{}", self.sigma.to_string().replace(".", "_")))
     }
-    pub fn kernel_at(&self, sample_var: &SampleVar) -> f32{
-        let center_offset = sample_var.center_offset();
+    pub fn kernel_at(&self, center_offset: &CenterOffset) -> f32{
         let x_2 = (center_offset.x * center_offset.x) as f32;
         let y_2 = (center_offset.y * center_offset.y) as f32;
         let two_sigma_2 = 2f32 * self.sigma * self.sigma;
@@ -18,30 +17,35 @@ impl GaussianBlur{
 
         return (1f32 / (std::f32::consts::PI * two_sigma_2)) * std::f32::consts::E.powf(exponent)
     }
-    pub fn make_accumulate_statement(&self, sample_var: &SampleVar) -> String{
-        let kernel_value = self.kernel_at(sample_var);
-        let accumulator_var = &self.accumulator_var;
-        format!("
-            {accumulator_var} += {kernel_value} * {sample_var};
-        ")
+    pub fn is_defined_at(&self, offset: &CenterOffset) -> bool{
+        offset.x.unsigned_abs() <= self.max_offset &&
+            offset.y.unsigned_abs() <= self.max_offset &&
+            offset.z.unsigned_abs() <= self.max_offset
+    }
+    pub fn make_accumulate_statement(
+        &self, accumulator_var: &AccumulatorVar, sample_var: &SampleVar, center_offset: &CenterOffset
+    ) -> Option<String>{
+        if !self.is_defined_at(center_offset){
+            return None
+        }
+        let kernel_value = self.kernel_at(center_offset);
+        Some(format!("{accumulator_var} += {kernel_value:.20e} * {sample_var};"))
     }
 }
 
 #[test]
-fn produce_shader(){
+fn test_gaussian(){
     use super::CenterOffset;
 
-    let gb = GaussianBlur::new(0.84089642, AccumulatorVar::new("gauss_accum".into()));
-    let radius: i32 = 3;
-
+    let gb = GaussianBlur{sigma: 0.84089642, max_offset: 3};
+    let radius: i8 = gb.max_offset.try_into().unwrap();
     let mut total: f32 = 0.0;
 
-    for x in -radius..=radius{
+    for x in -(gb.max_offset as i8)..=(gb.max_offset as i8){
         for y in -radius..=radius{
-            let sample_var = SampleVar{var_name: format!("sample"), center_offset: CenterOffset{x, y, z: 1}};
-            let kernel_entry = gb.kernel_at(&sample_var);
+            let kernel_entry = gb.kernel_at(&CenterOffset{x, y, z: 1});
             print!(" {kernel_entry:.16} |");
-            total += kernel_entry
+            total += kernel_entry;
         }
         println!("");
     }
