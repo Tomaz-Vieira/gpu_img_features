@@ -1,56 +1,116 @@
-use wgpu::Extent3d;
 
-use crate::feature_extractor_pipeline::kernel::{SampleVar, CenterOffset, AccumulatorVar};
+use crate::feature_extractor_pipeline::kernel::CenterOffset;
+use crate::wgsl::buffer::OutputBufferDecl;
+use crate::wgsl::{FVec4, IVec2};
+use crate::wgsl::compute_shader_source::ComputeShaderSource;
+use crate::wgsl::declaration::FunctionVarDecl;
+use crate::wgsl::expression::Expression;
+use crate::wgsl::statement::{Statement, Assignment, BufferWrite};
+use crate::wgsl::texture::Texture2dDecl;
 
 use super::gaussian_blur::GaussianBlur;
 
-pub struct CombinedFilters<'kernels>{
-    pub kernels: &'kernels [GaussianBlur],
-    pub input_extent: Extent3d,
+// pub struct CombinedFilterValue<const GAUSS_BLUR_COUNT: u8>{
+//     gaussian_blur: [glam::Vec4; GAUSS_BLUR_COUNT]
+// }
+// impl<const GAUSS_BLUR_COUNT: u8> NamableType for CombinedFilterValue<GAUSS_BLUR_COUNT>{
+//     fn wgsl() -> String { "CombinedFilterValue".into() }
+// }
+
+pub struct CombinedFilters{
+    pub kernels: Vec<GaussianBlur>,
+    pub input_texture: Texture2dDecl,
+    pub output_buffer: OutputBufferDecl<FVec4>,
 }
-impl CombinedFilters<'_>{
-    pub fn produce_shader(&self) -> String{
-        let mut shader_code = String::with_capacity(1024 * 1024);
+impl CombinedFilters{
+    pub fn produce_shader(&self) -> ComputeShaderSource{
+        let Self{kernels, input_texture, output_buffer} = *self;
+        let mut statements = Vec::<Box<dyn Statement>>::new();
 
-        let accumulator_vars: Vec<AccumulatorVar> = self.kernels.iter().map(|kernel| kernel.make_accumulator_var()).collect();
-        let sample_var = SampleVar(format!("sample"));
-        let radius: i8 = self.kernels.iter().map(|k| k.max_offset).max().unwrap().try_into().unwrap();
+        let accumulator_vars: Vec<FunctionVarDecl<FVec4>> = self.kernels.iter()
+            .map(|kernel| {
+                let acc_var = kernel.accumulator_var();
+                statements.push(Box::new(acc_var.clone()));
+                acc_var
+            })
+            .collect();
 
-        accumulator_vars.iter().for_each(|acc_var|{
-            shader_code += &format!("let {acc_var}: f32 = 0.0;\n");
-        });
-        shader_code += "\n";
+        let sample_var = FunctionVarDecl::<FVec4>{name: "sample".into(), initializer: None};
+        statements.push(Box::new(sample_var.clone()));
 
-        for y in -radius..=radius{
-            for x in -radius..=radius{
+        let max_radius: i32 = self.kernels.iter().map(|k| k.max_offset).max().unwrap().try_into().unwrap();
+
+        //FIXME: add to statements
+        let texture_dimension_decl = FunctionVarDecl{
+            name: "dimensions".into(),
+            initializer: Some(self.input_texture.textureDimensions()),
+        };
+        statements.push(Box::new(texture_dimension_decl.clone()));
+
+        for y in -max_radius..=max_radius{
+            for x in -max_radius..=max_radius{
                 let center_offset = CenterOffset{x, y, z: 0};
-                //FIXME: use a sampler instead
-                let clamped_x: i32 = (i32::from(x)).clamp(0, (self.input_extent.width - 1).try_into().unwrap());
-                let clamped_y: i32 = (i32::from(y)).clamp(0, (self.input_extent.height - 1).try_into().unwrap());
-                shader_code += &format!("{sample_var} = textureLoad(some_input, vec2i({clamped_x}, {clamped_y}), 0);\n");
+                //FIXME: use sampler to clamp instead of clmaping in code
+
+                let blas = texture_dimension_decl.x() - 1i32.into();
+
+                statements.push(Box::new(Assignment{
+                    assignee: sample_var.clone(),
+                    value: self.input_texture.textureLoad(
+                        Expression::<IVec2>::construct(
+                            Expression::from(x).clamped(0, blas),
+                            Expression::from(y).clamped(0, texture_dimension_decl.y() - 1u32.into()),
+                        ),
+                        0.into()
+                    )
+                }));
+
                 for (kernel_index, kernel) in self.kernels.iter().enumerate(){
-                    match kernel.make_accumulate_statement(&accumulator_vars[kernel_index], &sample_var, &center_offset){
-                        None => continue,
-                        Some(shader_line) => {
-                            shader_code += &shader_line;
-                            shader_code += "\n";
-                        }
+                    if let Some(shader_line) = kernel.accumulate(&accumulator_vars[kernel_index], &center_offset){
+                        statements.push(shader_line);
                     }
                 }
             }
         }
-        return shader_code
+
+        let glbl_inv_id = ComputeShaderSource::global_invocation_id();
+        let buffer_output_index = (glbl_inv_id.y() * texture_dimension_decl.expr().x()) + glbl_inv_id.x();
+        accumulator_vars.iter().enumerate().for_each( |(output_index, acc_var)| {
+            BufferWrite{
+                buffer: output_buffer.clone(),
+                index: buffer_output_index,
+                value: accumulator_vars.expr(),
+            }
+        });
+
+        return ComputeShaderSource {
+            workgroup_size: 16,
+            main_fn_name: "main".into(),
+            input_textures: input_texture.clone(),
+            output_buffers: output_buffer.clone(),
+            statements
+        }
     }
 }
 
 #[test]
 fn produce_shader(){
+    use std::marker::PhantomData;
+    use crate::util::{Group, Binding};
+
+
     let shader_code = CombinedFilters{
-        kernels: &[
+        kernels: vec![
             GaussianBlur{sigma: 0.3, max_offset: 3},
             GaussianBlur{sigma: 0.7, max_offset: 3},
         ],
-        input_extent: Extent3d { width: 3, height: 3, depth_or_array_layers: 1 }
+        input_texture: Texture2dDecl { group: Group(0), binding: Binding(0), name: "my_texture".into() },
+        output_buffer: OutputBufferDecl::<FVec4>{
+            group: Group(0),
+            binding: Binding(1),
+            name: "my_output".into(),
+            marker: PhantomData,
+        },
     }.produce_shader();
     println!("Shader code:\n{shader_code}");
 }

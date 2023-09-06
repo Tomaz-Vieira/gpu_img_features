@@ -2,6 +2,7 @@
 
 pub mod feature_extractor_pipeline;
 pub mod util;
+pub mod wgsl;
 
 use wgpu::{
     Instance, InstanceDescriptor, Backends, RequestAdapterOptions,

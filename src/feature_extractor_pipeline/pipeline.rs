@@ -2,9 +2,9 @@ use std::num::NonZeroU8;
 
 use wgpu::{ShaderModuleDescriptor, BindGroupLayoutDescriptor, BindGroupDescriptor};
 
-use crate::{util::{Arg, WorkgroupSize, ImageBufferExt, Extent3dExt, Group, Binding, NumChannels}, feature_extractor_pipeline::reader_buffer::ReaderBuffer};
+use crate::{util::{Arg, WorkgroupSize, ImageBufferExt, Extent3dExt, Group, Binding, NumChannels}, feature_extractor_pipeline::{reader_buffer::ReaderBuffer, kernel::combined_filters::CombinedFilters}};
 
-use super::{input_texture::InputTextureSlot, output_buffer::OutputBufferSlot};
+use super::{input_texture::InputTextureSlot, output_buffer::OutputBufferSlot, kernel::gaussian_blur::GaussianBlur};
 
 pub struct FeatureExtractorPipeline{
     input_texture_slot: InputTextureSlot,
@@ -18,14 +18,19 @@ impl FeatureExtractorPipeline{
         device: &wgpu::Device,
         Arg(tile_size): Arg<"tile_size", wgpu::Extent3d>,
         workgroup_size: WorkgroupSize,
+        kernels: &[GaussianBlur],
     ) -> Self{
         let input_texture_view_dimension = match tile_size.depth_or_array_layers{
             1 => wgpu::TextureViewDimension::D2,
             _ => wgpu::TextureViewDimension::D3,
         };
 
+        let input_texture_name = "input_image";
+        let texture_dimensions_name = "dimensions";
+        let current_coords_name = "coords";
+
         let input_texture_slot = InputTextureSlot::new(
-            "input_image".into(),
+            input_texture_name.into(),
             Group(0),
             Binding(0),
             wgpu::TextureSampleType::Float { filterable: false },
@@ -38,6 +43,11 @@ impl FeatureExtractorPipeline{
             Binding(1),
         );
 
+        let kernel_processing_code = CombinedFilters{
+            kernels, input_texture_name, texture_dimensions_name, current_coords_name
+        }.produce_shader();
+
+
         let input_name = input_texture_slot.name();
         let output_name = output_buffer_slot.name();
         let shader_code = format!("
@@ -49,16 +59,18 @@ impl FeatureExtractorPipeline{
                 @builtin(global_invocation_id) global_id : vec3<u32>,
             ) {{
                 let dimensions = textureDimensions({input_name});
-                let coords = global_id.xy;
+                let {current_coords_name} = global_id.xy;
 
-                if(coords.x >= dimensions.x || coords.y >= dimensions.y) {{
+                if({current_coords_name}.x >= dimensions.x || {current_coords_name}.y >= dimensions.y) {{
                     return;
                 }}
 
-                let color = textureLoad({input_name}, coords.xy, 0);
+                {kernel_processing_code}
+
+                let color = textureLoad({input_name}, {current_coords_name}.xy, 0);
                 let gray = dot(vec3<f32>(0.299, 0.587, 0.114), color.rgb);
 
-                {output_name}[coords.y * dimensions.x + coords.x] = vec4<f32>(gray, gray, gray, color.a);
+                {output_name}[{current_coords_name}.y * dimensions.x + {current_coords_name}.x] = vec4<f32>(gray, gray, gray, color.a);
             }}
         ");
         println!("{}", shader_code);
