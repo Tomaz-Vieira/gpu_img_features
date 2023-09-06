@@ -43,9 +43,9 @@ impl FeatureExtractorPipeline{
             Binding(1),
         );
 
-        let kernel_processing_code = CombinedFilters{
-            kernels, input_texture_name, texture_dimensions_name, current_coords_name
-        }.produce_shader();
+        // let kernel_processing_code = CombinedFilters{
+        //     kernels, input_texture_name, texture_dimensions_name, current_coords_name
+        // }.produce_shader();
 
 
         let input_name = input_texture_slot.name();
@@ -65,7 +65,6 @@ impl FeatureExtractorPipeline{
                     return;
                 }}
 
-                {kernel_processing_code}
 
                 let color = textureLoad({input_name}, {current_coords_name}.xy, 0);
                 let gray = dot(vec3<f32>(0.299, 0.587, 0.114), color.rgb);

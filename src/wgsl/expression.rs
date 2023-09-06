@@ -1,4 +1,4 @@
-use std::{fmt::Display, marker::PhantomData, ops::{Add, Mul}};
+use std::{fmt::Display, marker::PhantomData, ops::{Add, Sub, Mul}};
 
 use nalgebra::Vector3;
 use paste::paste;
@@ -36,7 +36,7 @@ macro_rules! impl_Op_for_Expression {($op_name:ident, $op_symbol:literal) => {pa
         type Output = Expression<T>;
         fn [<$op_name:lower>](self, rhs: RHS) -> Self::Output {
             Expression::new(
-                format!("({} {} {})", self.0, stringify!($op_symbol), rhs.into())
+                format!("({} {} {})", self.0, $op_symbol, rhs.into())
             )
         }
     }
@@ -46,6 +46,11 @@ impl_Op_for_Expression!(Sub, "-");
 impl_Op_for_Expression!(Mul, "*");
 
 
+impl From<&Expression<u32>> for Expression<i32>{
+    fn from(value: &Expression<u32>) -> Self {
+        return Expression::new(value.0.clone()) //FIXME: double check if this is actually valid
+    }
+}
 impl From<f32> for Expression<f32>{
     fn from(value: f32) -> Self {
         return Expression::new(format!("{value:.20e}"))

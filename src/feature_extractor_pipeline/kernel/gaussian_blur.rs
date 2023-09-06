@@ -46,7 +46,7 @@ impl GaussianBlur{
         let kernel_value = Expression::from(self.kernel_at(center_offset)?);
         Some(AddAssignment{
             assignee: self.accumulator_var(),
-            value: kernel_value * &sample_var.expr(),
+            value: kernel_value * &Expression::from(sample_var),
         })
     }
 }

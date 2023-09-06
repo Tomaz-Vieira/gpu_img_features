@@ -31,7 +31,7 @@ impl ComputeShaderSource{
         let statements_wgsl = self.statements.iter()
             .map(|st| st.wgsl())
             .collect::<Vec<_>>()
-            .join("/n");
+            .join("\n                ");
         format!("
             {input_textures_wgsl}
 

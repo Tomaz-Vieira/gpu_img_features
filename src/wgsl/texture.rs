@@ -13,7 +13,7 @@ pub struct Texture2dDecl{
 }
 impl Texture2dDecl{
     pub fn wgsl(&self) -> String{
-        let Self{group, binding, name, sample_type, ..} = &self;
+        let Self{group, binding, name, ..} = &self;
         format!(
             "@group({group}) @binding({binding}) var {name} : texture_2d<f32>;"
         )
@@ -21,11 +21,13 @@ impl Texture2dDecl{
     #[allow(non_snake_case)]
     pub fn textureLoad(
         &self,
-        coords: Expression<IVec2>,
-        level: Expression<u32>
+        coords: impl Into<Expression<IVec2>>,
+        level: impl Into<Expression<u32>>,
     ) -> Expression<Vector4<f32>>{
         let texture_name = &self.name;
-        return Expression(format!("textureLoad({texture_name}, {coords}, {level})"), PhantomData)
+        let coords_expr = coords.into();
+        let level_expr = level.into();
+        return Expression(format!("textureLoad({texture_name}, {coords_expr}, {level_expr})"), PhantomData)
     }
     #[allow(non_snake_case)]
     pub fn textureDimensions(&self) -> Expression<Vector2<u32>>{

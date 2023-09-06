@@ -35,16 +35,16 @@ fn main() {
     let dims = img_rgba8.dimensions();
     println!("Image has these dimensions:{:?} ", dims);
 
-    let pipeline = FeatureExtractorPipeline::new(
-        &device,
-        Arg::<"tile_size", _>(img_rgba8.extent()),
-        WorkgroupSize{
-            x: 16,
-            y: 16,
-            z: 1,
-        }
-    );
+    // let pipeline = FeatureExtractorPipeline::new(
+    //     &device,
+    //     Arg::<"tile_size", _>(img_rgba8.extent()),
+    //     WorkgroupSize{
+    //         x: 16,
+    //         y: 16,
+    //         z: 1,
+    //     }
+    // );
 
 
-    pipeline.process(&device, &queue, &img_rgba8);
+    // pipeline.process(&device, &queue, &img_rgba8);
 }

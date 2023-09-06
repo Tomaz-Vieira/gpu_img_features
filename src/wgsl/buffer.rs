@@ -15,8 +15,8 @@ pub struct OutputBufferDecl<T: ShaderTypeExt>{
 }
 impl<T: ShaderTypeExt> Wgsl for OutputBufferDecl<T>{
     fn wgsl(&self) -> String{
-        let Self{group, binding, name, item_type, ..} = &self;
-        let item_type_str = T::wgsl();
+        let Self{group, binding, name, ..} = &self;
+        let item_type_str = T::wgsl_type_name();
         // let {group, binding, ..} = self;
         format!(
             "@group({group}) @binding({binding}) var<storage, write> {name} : array<{item_type_str}>;"

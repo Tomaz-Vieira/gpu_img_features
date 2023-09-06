@@ -9,14 +9,14 @@ pub trait Statement: Wgsl{}
 macro_rules! declare_assigment {
     ($name:ident, $operator:literal) => {
         pub struct $name<T: ShaderTypeExt>{
-            assignee: FunctionVarDecl<T>,
-            value: Expression<T>,
+            pub assignee: FunctionVarDecl<T>,
+            pub value: Expression<T>,
         }
         impl<T: ShaderTypeExt> Wgsl for $name<T>{
             fn wgsl(&self) -> String {
-                let assignee_wgsl = self.assignee.wgsl();
+                let assignee_wgsl = &self.assignee.name;
                 let val_wgsl = self.value.wgsl();
-                format!("{assignee_wgsl} {} {val_wgsl}", $operator)
+                format!("{assignee_wgsl} {} {val_wgsl};", $operator)
             }
         }
         impl<T: ShaderTypeExt> Statement for $name<T>{}
@@ -28,9 +28,9 @@ declare_assigment!(AddAssignment, "+=");
 
 
 pub struct BufferWrite<T: ShaderTypeExt>{
-    buffer: OutputBufferDecl<T>,
-    index: Expression<u32>,
-    value: Expression<T>,
+    pub buffer: OutputBufferDecl<T>,
+    pub index: Expression<u32>,
+    pub value: Expression<T>,
 }
 impl<T: ShaderTypeExt> Wgsl for BufferWrite<T>{
     fn wgsl(&self) -> String {

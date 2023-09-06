@@ -24,7 +24,7 @@ pub struct CombinedFilters{
 }
 impl CombinedFilters{
     pub fn produce_shader(&self) -> ComputeShaderSource{
-        let Self{kernels, input_texture, output_buffer} = *self;
+        let Self{kernels, input_texture, output_buffer} = self;
         let mut statements = Vec::<Box<dyn Statement>>::new();
 
         let accumulator_vars: Vec<FunctionVarDecl<FVec4>> = self.kernels.iter()
@@ -47,47 +47,60 @@ impl CombinedFilters{
         };
         statements.push(Box::new(texture_dimension_decl.clone()));
 
+        let texture_dims_max_x = FunctionVarDecl{
+            name: "texture_dims_max_x".into(),
+            initializer: Some(texture_dimension_decl.x() - 1),
+        };
+        statements.push(Box::new(texture_dims_max_x.clone()));
+
+        let texture_dims_max_y = FunctionVarDecl{
+            name: "texture_dims_max_y".into(),
+            initializer: Some(texture_dimension_decl.y() - 1),
+        };
+        statements.push(Box::new(texture_dims_max_y.clone()));
+
+
         for y in -max_radius..=max_radius{
             for x in -max_radius..=max_radius{
                 let center_offset = CenterOffset{x, y, z: 0};
+                let x = Expression::from(x);
+                let y = Expression::from(y);
                 //FIXME: use sampler to clamp instead of clmaping in code
-
-                let blas = texture_dimension_decl.x() - 1i32.into();
 
                 statements.push(Box::new(Assignment{
                     assignee: sample_var.clone(),
                     value: self.input_texture.textureLoad(
                         Expression::<IVec2>::construct(
-                            Expression::from(x).clamped(0, blas),
-                            Expression::from(y).clamped(0, texture_dimension_decl.y() - 1u32.into()),
+                            x.clamped(0, &Expression::from(&texture_dims_max_x)),
+                            y.clamped(0, &Expression::from(&texture_dims_max_y)),
                         ),
-                        0.into()
+                        0
                     )
                 }));
 
                 for (kernel_index, kernel) in self.kernels.iter().enumerate(){
                     if let Some(shader_line) = kernel.accumulate(&accumulator_vars[kernel_index], &center_offset){
-                        statements.push(shader_line);
+                        statements.push(Box::new(shader_line));
                     }
                 }
             }
         }
 
-        let glbl_inv_id = ComputeShaderSource::global_invocation_id();
-        let buffer_output_index = (glbl_inv_id.y() * texture_dimension_decl.expr().x()) + glbl_inv_id.x();
+        let global_invocation_id = ComputeShaderSource::global_invocation_id();
+        let buffer_output_index = (global_invocation_id.y() * texture_dimension_decl.x()) + global_invocation_id.x();
         accumulator_vars.iter().enumerate().for_each( |(output_index, acc_var)| {
-            BufferWrite{
+            statements.push(Box::new(BufferWrite{
                 buffer: output_buffer.clone(),
-                index: buffer_output_index,
-                value: accumulator_vars.expr(),
-            }
+                index: buffer_output_index.clone(),
+                value: acc_var.into(),
+            }));
         });
 
         return ComputeShaderSource {
             workgroup_size: 16,
             main_fn_name: "main".into(),
-            input_textures: input_texture.clone(),
-            output_buffers: output_buffer.clone(),
+            input_textures: vec![input_texture.clone()],
+            output_buffers: vec![Box::new(output_buffer.clone())],
             statements
         }
     }
@@ -111,6 +124,6 @@ fn produce_shader(){
             name: "my_output".into(),
             marker: PhantomData,
         },
-    }.produce_shader();
+    }.produce_shader().wgsl();
     println!("Shader code:\n{shader_code}");
 }
