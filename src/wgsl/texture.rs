@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use nalgebra::{Vector2, Vector4};
+use encase::nalgebra::{Vector2, Vector4};
 
 use crate::util::{Group, Binding};
 use super::{expression::Expression, IVec2};

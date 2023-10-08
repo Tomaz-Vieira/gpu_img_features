@@ -9,8 +9,7 @@ edition = "2021"
 pollster = "0.3.0"
 image = "0.24.6"
 bytemuck = "1.13.1"
-encase = {version = "0.6.1", features = ["nalgebra"]}
-nalgebra = { version = "0.32"}
+encase = {path = "../encase/", features = ["nalgebra"]}
 paste = "1.0.14"
 
 [dependencies.wgpu]

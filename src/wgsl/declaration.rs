@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use super::{expression::Expression, Wgsl, statement::Statement, ShaderTypeExt};
-use nalgebra::{Vector3, Vector2};
+use encase::nalgebra::{Vector3, Vector2};
 
 pub enum AddressSpace{
     Storage,

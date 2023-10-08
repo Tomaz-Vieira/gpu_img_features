@@ -1,6 +1,6 @@
 use std::{fmt::Display, marker::PhantomData, ops::{Add, Sub, Mul}};
 
-use nalgebra::Vector3;
+use encase::nalgebra::Vector3;
 use paste::paste;
 
 use super::{IVec2, ShaderTypeExt, Wgsl, FVec4};
