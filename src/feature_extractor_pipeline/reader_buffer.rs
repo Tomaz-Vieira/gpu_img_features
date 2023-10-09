@@ -1,9 +1,8 @@
-
 use super::output_buffer::OutputBuffer;
 
 pub struct ReaderBuffer<'source> {
     buffer: wgpu::Buffer,
-    source: &'source OutputBuffer
+    source: &'source OutputBuffer,
 }
 impl<'source> ReaderBuffer<'source> {
     pub fn new(name: &str, source: &'source OutputBuffer, device: &wgpu::Device) -> Self {
@@ -27,10 +26,16 @@ impl<'source> ReaderBuffer<'source> {
         let buffer_slice = self.buffer.slice(..); //FIXME
         buffer_slice.get_mapped_range()
     }
-    pub fn encode_copy(&self, encoder: &mut wgpu::CommandEncoder){
-        encoder.copy_buffer_to_buffer(self.source.raw(), 0, &self.buffer, 0, self.source.size().padded_size().into());
+    pub fn encode_copy(&self, encoder: &mut wgpu::CommandEncoder) {
+        encoder.copy_buffer_to_buffer(
+            self.source.raw(),
+            0,
+            &self.buffer,
+            0,
+            self.source.size().padded_size().into(),
+        );
     }
-    pub fn unmap(&self){
+    pub fn unmap(&self) {
         self.buffer.unmap()
     }
 }

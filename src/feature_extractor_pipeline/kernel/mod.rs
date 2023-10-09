@@ -1,9 +1,8 @@
 pub mod combined_filters;
 
-
 pub mod gaussian_blur;
 
-pub struct CenterOffset{
+pub struct CenterOffset {
     pub x: i32,
     pub y: i32,
     pub z: i32,
