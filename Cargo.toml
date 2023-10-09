@@ -11,6 +11,4 @@ image = "0.24.6"
 bytemuck = "1.13.1"
 encase = {path = "../encase/", features = ["nalgebra"]}
 paste = "1.0.14"
-
-[dependencies.wgpu]
-path = "/home/builder/source/wgpu/wgpu"
+wgpu = "0.17.1"
