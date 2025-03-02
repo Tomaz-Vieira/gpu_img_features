@@ -57,10 +57,10 @@ fn test_gaussian() {
         sigma: 0.84089642,
         max_offset: 3,
     };
-    let radius: i32 = gb.max_offset.try_into().unwrap();
+    let radius = i32::try_from(gb.max_offset).unwrap();
     let mut total: f32 = 0.0;
 
-    for x in -(gb.max_offset as i32)..=(gb.max_offset as i32) {
+    for x in -radius..=radius {
         for y in -radius..=radius {
             let Some(kernel_entry) = gb.kernel_at(&CenterOffset { x, y, z: 1 }) else {
                 continue;

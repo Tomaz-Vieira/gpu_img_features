@@ -1,8 +1,6 @@
-use std::{
-    fmt::Display,
-    marker::PhantomData,
-    ops::{Add, Mul, Sub},
-};
+use std::ops::Mul;
+use std::marker::PhantomData;
+use std::fmt::Display;
 
 use encase::nalgebra::Vector3;
 use paste::paste;

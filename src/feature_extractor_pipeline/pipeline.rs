@@ -3,11 +3,11 @@ use std::num::NonZeroU8;
 use wgpu::{BindGroupDescriptor, BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
 use crate::{
-    feature_extractor_pipeline::{kernel::combined_filters::CombinedFilters, reader_buffer::ReaderBuffer},
-    util::{Arg, Binding, Extent3dExt, Group, ImageBufferExt, NumChannels, WorkgroupSize},
+    feature_extractor_pipeline::reader_buffer::ReaderBuffer,
+    util::{Binding, Extent3dExt, Group, ImageBufferExt, NumChannels, WorkgroupSize},
 };
 
-use super::{input_texture::InputTextureSlot, kernel::gaussian_blur::GaussianBlur, output_buffer::OutputBufferSlot};
+use super::{input_texture::InputTextureSlot, output_buffer::OutputBufferSlot};
 
 pub struct FeatureExtractorPipeline {
     input_texture_slot: InputTextureSlot,
@@ -19,9 +19,9 @@ pub struct FeatureExtractorPipeline {
 impl FeatureExtractorPipeline {
     pub fn new(
         device: &wgpu::Device,
-        Arg(tile_size): Arg<"tile_size", wgpu::Extent3d>,
+        tile_size: wgpu::Extent3d,
         workgroup_size: WorkgroupSize,
-        kernels: &[GaussianBlur],
+        // kernels: &[GaussianBlur],
     ) -> Self {
         let input_texture_view_dimension = match tile_size.depth_or_array_layers {
             1 => wgpu::TextureViewDimension::D2,

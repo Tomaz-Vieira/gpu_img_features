@@ -1,16 +1,12 @@
-#![feature(adt_const_params)]
-
 pub mod feature_extractor_pipeline;
 pub mod util;
 pub mod wgsl;
 
+use feature_extractor_pipeline::pipeline::FeatureExtractorPipeline;
 use pollster::FutureExt;
+use util::{ImageBufferExt, WorkgroupSize};
 use wgpu::{Backends, Instance, InstanceDescriptor, RequestAdapterOptions};
 
-use crate::{
-    feature_extractor_pipeline::pipeline::FeatureExtractorPipeline,
-    util::{Arg, ImageBufferExt, WorkgroupSize},
-};
 
 fn main() {
     let instance = Instance::new(InstanceDescriptor {
@@ -35,15 +31,15 @@ fn main() {
     let dims = img_rgba8.dimensions();
     println!("Image has these dimensions:{:?} ", dims);
 
-    // let pipeline = FeatureExtractorPipeline::new(
-    //     &device,
-    //     Arg::<"tile_size", _>(img_rgba8.extent()),
-    //     WorkgroupSize{
-    //         x: 16,
-    //         y: 16,
-    //         z: 1,
-    //     }
-    // );
+    let pipeline = FeatureExtractorPipeline::new(
+        &device,
+        img_rgba8.extent(),
+        WorkgroupSize{
+            x: 16,
+            y: 16,
+            z: 1,
+        }
+    );
 
-    // pipeline.process(&device, &queue, &img_rgba8);
+    pipeline.process(&device, &queue, &img_rgba8);
 }

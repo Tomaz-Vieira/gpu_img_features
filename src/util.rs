@@ -4,8 +4,6 @@ use std::{
     ops::Deref,
 };
 
-pub struct Arg<const NAME: &'static str, T>(pub T);
-
 pub struct WorkgroupSize {
     pub x: u32,
     pub y: u32,
