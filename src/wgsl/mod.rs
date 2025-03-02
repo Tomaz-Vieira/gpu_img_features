@@ -22,30 +22,24 @@ pub type UVec3 = Vector3<u32>;
 pub type UVec2 = Vector2<u32>;
 pub type IVec2 = Vector2<i32>;
 
-macro_rules! impl_ShaderTypeExt_for_primitive {
-    ($primitive:ty) => {
-        impl ShaderTypeExt for $primitive {
-            fn wgsl_type_name() -> String {
-                stringify!($primitive).into()
-            }
+macro_rules! impl_ShaderTypeExt_for_primitive {($primitive:ty) => {
+    impl ShaderTypeExt for $primitive {
+        fn wgsl_type_name() -> String {
+            stringify!($primitive).into()
         }
-    };
-}
+    }
+};}
 impl_ShaderTypeExt_for_primitive!(f32);
 impl_ShaderTypeExt_for_primitive!(u32);
 impl_ShaderTypeExt_for_primitive!(i32);
 
-macro_rules! impl_ShaderTypeExt_for_vec {
-    ($length:literal, $item_type:ty) => {
-        paste! {
-            impl ShaderTypeExt for [<Vector $length>]<$item_type>{
-                fn wgsl_type_name() -> String {
-                    format!("vec{}<{}>", stringify!($length), $item_type::wgsl_type_name()).into()
-                }
-            }
+macro_rules! impl_ShaderTypeExt_for_vec {($length:literal, $item_type:ty) => { paste! {
+    impl ShaderTypeExt for [<Vector $length>]<$item_type>{
+        fn wgsl_type_name() -> String {
+            format!("vec{}<{}>", stringify!($length), $item_type::wgsl_type_name()).into()
         }
-    };
-}
+    }
+}};}
 impl_ShaderTypeExt_for_vec!(4, f32);
 impl_ShaderTypeExt_for_vec!(3, f32);
 impl_ShaderTypeExt_for_vec!(2, f32);
