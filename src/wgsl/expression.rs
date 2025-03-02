@@ -28,24 +28,20 @@ impl<T: ShaderTypeExt> Display for Expression<T> {
     }
 }
 
-macro_rules! impl_Op_for_Expression {
-    ($op_name:ident, $op_symbol:literal) => {
-        paste! {
-            impl<T, RHS> std::ops::$op_name<RHS> for Expression<T>
-            where
-                T: ShaderTypeExt,
-                RHS: Into<Expression<T>>
-            {
-                type Output = Expression<T>;
-                fn [<$op_name:lower>](self, rhs: RHS) -> Self::Output {
-                    Expression::new(
-                        format!("({} {} {})", self.0, $op_symbol, rhs.into())
-                    )
-                }
-            }
+macro_rules! impl_Op_for_Expression { ($op_name:ident, $op_symbol:literal) => { paste! {
+    impl<T, RHS> std::ops::$op_name<RHS> for Expression<T>
+    where
+        T: ShaderTypeExt,
+        RHS: Into<Expression<T>>
+    {
+        type Output = Expression<T>;
+        fn [<$op_name:lower>](self, rhs: RHS) -> Self::Output {
+            Expression::new(
+                format!("({} {} {})", self.0, $op_symbol, rhs.into())
+            )
         }
-    };
-}
+    }
+}};}
 impl_Op_for_Expression!(Add, "+");
 impl_Op_for_Expression!(Sub, "-");
 impl_Op_for_Expression!(Mul, "*");
@@ -92,21 +88,19 @@ impl Mul<&Expression<FVec4>> for Expression<f32> {
     }
 }
 
-macro_rules! impl_vec3_xyz {
-    ($item_type:ty) => {
-        impl Expression<Vector3<$item_type>> {
-            pub fn x(&self) -> Expression<$item_type> {
-                Expression::new(format!("{self}.x"))
-            }
-            pub fn y(&self) -> Expression<$item_type> {
-                Expression::new(format!("{self}.y"))
-            }
-            pub fn z(&self) -> Expression<$item_type> {
-                Expression::new(format!("{self}.z"))
-            }
+macro_rules! impl_vec3_xyz {($item_type:ty) => {
+    impl Expression<Vector3<$item_type>> {
+        pub fn x(&self) -> Expression<$item_type> {
+            Expression::new(format!("{self}.x"))
         }
-    };
-}
+        pub fn y(&self) -> Expression<$item_type> {
+            Expression::new(format!("{self}.y"))
+        }
+        pub fn z(&self) -> Expression<$item_type> {
+            Expression::new(format!("{self}.z"))
+        }
+    }
+};}
 impl_vec3_xyz!(f32);
 impl_vec3_xyz!(u32);
 
