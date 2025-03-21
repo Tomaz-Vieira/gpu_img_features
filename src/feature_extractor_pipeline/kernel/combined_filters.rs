@@ -1,4 +1,5 @@
 use crate::feature_extractor_pipeline::kernel::CenterOffset;
+use crate::util::WorkgroupSize;
 use crate::wgsl::buffer::OutputBufferDecl;
 use crate::wgsl::compute_shader_source::ComputeShaderSource;
 use crate::wgsl::declaration::FunctionVarDecl;
@@ -110,8 +111,8 @@ impl CombinedFilters {
         });
 
         return ComputeShaderSource {
-            workgroup_size: 16,
-            main_fn_name: "main".into(),
+            workgroup_size: WorkgroupSize{x: 16, y: 1, z:1 },
+            main_fn_name: "main".to_owned(),
             input_textures: vec![input_texture.clone()],
             output_buffers: vec![Box::new(output_buffer.clone())],
             statements,

@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use encase::nalgebra::Vector3;
 
+use crate::util::WorkgroupSize;
 use crate::wgsl::buffer::OutputBuffer;
 use crate::wgsl::expression::Expression;
 use crate::wgsl::statement::Statement;
@@ -9,7 +10,7 @@ use crate::wgsl::texture::Texture2dDecl;
 use crate::wgsl::Wgsl;
 
 pub struct ComputeShaderSource {
-    pub workgroup_size: u32,
+    pub workgroup_size: WorkgroupSize,
     pub main_fn_name: String,
     pub input_textures: Vec<Texture2dDecl>,
     pub output_buffers: Vec<Box<dyn OutputBuffer>>,
