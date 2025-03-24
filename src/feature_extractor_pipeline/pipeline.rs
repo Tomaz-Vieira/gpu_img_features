@@ -98,9 +98,11 @@ impl FeatureExtractorPipeline {
             slots_bind_group_layout,
             pipeline: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some("my_pipeline"),
-                entry_point: "extract_features",
+                entry_point: Some("extract_features"),
                 layout: Some(&pipeline_layout),
                 module: &shader_module,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
             }),
         }
     }
@@ -134,6 +136,7 @@ impl FeatureExtractorPipeline {
         {
             let mut compute_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("my_compute_pass"),
+                timestamp_writes: None, 
             });
             compute_pass.set_pipeline(&self.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);

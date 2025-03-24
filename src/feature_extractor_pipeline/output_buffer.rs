@@ -59,7 +59,7 @@ impl OutputBufferSlot {
         let name = &self.name;
         let group = &self.group;
         let binding = &self.binding;
-        format!("@group({group}) @binding({binding}) var<storage, write> {name} : array<vec4<f32>>;")
+        format!("@group({group}) @binding({binding}) var<storage, read_write> {name} : array<vec4<f32>>;")
     }
     pub fn to_binding_type(&self) -> wgpu::BindingType {
         wgpu::BindingType::Buffer {

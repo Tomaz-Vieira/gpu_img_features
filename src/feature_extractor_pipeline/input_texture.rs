@@ -108,7 +108,7 @@ impl InputTexture {
         queue.write_texture(
             self.texture.as_image_copy(),
             image.as_raw(),
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 bytes_per_row: Some(4 * image.width()),
                 rows_per_image: Some(image.height()),
                 offset: 0,
