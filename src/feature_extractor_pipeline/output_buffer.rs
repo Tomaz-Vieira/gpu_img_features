@@ -30,14 +30,11 @@ impl OutputBuffer {
 }
 
 pub struct OutputBufferSlot {
-    name: String,
-    group: Group,
-    binding: Binding,
+    pub name: String,
+    pub group: Group,
+    pub binding: Binding,
 }
 impl OutputBufferSlot {
-    pub fn new(name: String, group: Group, binding: Binding) -> Self {
-        Self { name, group, binding }
-    }
     pub fn create_buffer(&self, device: &wgpu::Device, size: BufferSize) -> OutputBuffer {
         let name = &self.name;
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -54,12 +51,6 @@ impl OutputBufferSlot {
     }
     pub fn name(&self) -> &str {
         return &self.name;
-    }
-    pub fn to_wgsl_declaration(&self) -> String {
-        let name = &self.name;
-        let group = &self.group;
-        let binding = &self.binding;
-        format!("@group({group}) @binding({binding}) var<storage, read_write> {name} : array<vec4<f32>>;")
     }
     pub fn to_binding_type(&self) -> wgpu::BindingType {
         wgpu::BindingType::Buffer {
@@ -79,6 +70,9 @@ impl OutputBufferSlot {
 }
 impl Display for OutputBufferSlot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_wgsl_declaration())
+        let name = &self.name;
+        let group = &self.group;
+        let binding = &self.binding;
+        write!(f, "@group({group}) @binding({binding}) var<storage, read_write> {name} : array<vec4<f32>>;")
     }
 }

@@ -1,4 +1,4 @@
-use crate::wgsl::declaration::FunctionVarDecl;
+use crate::wgsl::declaration::LocalVarDecl;
 use crate::wgsl::expression::Expression;
 use crate::wgsl::{ShaderTypeExt, Wgsl};
 
@@ -9,7 +9,7 @@ pub trait Statement: Wgsl {}
 macro_rules! declare_assigment {
     ($name:ident, $operator:literal) => {
         pub struct $name<T: ShaderTypeExt> {
-            pub assignee: FunctionVarDecl<T>,
+            pub assignee: LocalVarDecl<T>,
             pub value: Expression<T>,
         }
         impl<T: ShaderTypeExt> Wgsl for $name<T> {

@@ -31,19 +31,30 @@ impl AccessMode {
     }
 }
 
-#[derive(Clone)]
-pub struct FunctionVarDecl<T: ShaderTypeExt> {
+pub struct LocalVarDecl<T: ShaderTypeExt> {
     pub name: String,
     pub initializer: Option<Expression<T>>,
 }
 
-impl<T: ShaderTypeExt> From<&FunctionVarDecl<T>> for Expression<T> {
-    fn from(value: &FunctionVarDecl<T>) -> Self {
+impl<T: ShaderTypeExt> LocalVarDecl<T>{
+    pub fn as_expr(&self) -> Expression<T>{
+        Expression::from(self)
+    }
+}
+
+impl<T: ShaderTypeExt> Clone for LocalVarDecl<T>{
+    fn clone(&self) -> Self {
+        Self{name: self.name.clone(), initializer: self.initializer.clone()}
+    }
+}
+
+impl<T: ShaderTypeExt> From<&LocalVarDecl<T>> for Expression<T> {
+    fn from(value: &LocalVarDecl<T>) -> Self {
         Expression(value.name.clone(), PhantomData)
     }
 }
 
-impl<T: ShaderTypeExt> Wgsl for FunctionVarDecl<T> {
+impl<T: ShaderTypeExt> Wgsl for LocalVarDecl<T> {
     fn wgsl(&self) -> String {
         let name = &self.name;
         let type_name = T::wgsl_type_name();
@@ -55,11 +66,11 @@ impl<T: ShaderTypeExt> Wgsl for FunctionVarDecl<T> {
     }
 }
 
-impl<T: ShaderTypeExt> Statement for FunctionVarDecl<T> {}
+impl<T: ShaderTypeExt> Statement for LocalVarDecl<T> {}
 
-macro_rules! impl_FunctionVarDecl_xy {
+macro_rules! impl_LocalVarDecl_xy {
     ($item_type:ty) => {
-        impl FunctionVarDecl<Vector2<$item_type>> {
+        impl LocalVarDecl<Vector2<$item_type>> {
             pub fn x(&self) -> Expression<$item_type> {
                 Expression(format!("{}.x", Expression::from(self)), PhantomData)
             }
@@ -70,9 +81,9 @@ macro_rules! impl_FunctionVarDecl_xy {
     };
 }
 
-macro_rules! impl_FunctionVarDecl_xyz {
+macro_rules! impl_LocalVarDecl_xyz {
     ($item_type:ty) => {
-        impl FunctionVarDecl<Vector3<$item_type>> {
+        impl LocalVarDecl<Vector3<$item_type>> {
             pub fn x(&self) -> Expression<$item_type> {
                 Expression(format!("{}.x", Expression::from(self)), PhantomData)
             }
@@ -85,8 +96,8 @@ macro_rules! impl_FunctionVarDecl_xyz {
         }
     };
 }
-impl_FunctionVarDecl_xyz!(f32);
-impl_FunctionVarDecl_xyz!(u32);
+impl_LocalVarDecl_xyz!(f32);
+impl_LocalVarDecl_xyz!(u32);
 
-impl_FunctionVarDecl_xy!(f32);
-impl_FunctionVarDecl_xy!(u32);
+impl_LocalVarDecl_xy!(f32);
+impl_LocalVarDecl_xy!(u32);
