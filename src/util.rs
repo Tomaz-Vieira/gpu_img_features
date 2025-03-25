@@ -30,12 +30,13 @@ impl Extent3dExt for wgpu::Extent3d {
         );
     }
     fn to_padded_buffer_size(&self, format: wgpu::TextureFormat) -> u32 {
+        //FIXME: assuming 2D
         let bytes_per_texel: u32 = match format {
             wgpu::TextureFormat::Rgba8Unorm => 4,
             _ => todo!("Add other texture formats"),
         };
         let actual_width = self.width * bytes_per_texel;
-        let missing_padding = actual_width % 256;
+        let missing_padding = 256 - (actual_width % 256);
         let padded_width = actual_width + missing_padding;
 
         return padded_width * self.height;
