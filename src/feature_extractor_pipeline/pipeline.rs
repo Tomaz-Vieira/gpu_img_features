@@ -145,8 +145,7 @@ impl FeatureExtractorPipeline {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         image: &image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
-    ) /* -> image::ImageBuffer<image::Rgba<u8>, Vec<u8>> */
-    {
+    ) -> Result<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, String> {
         let input_texture = self.input_texture_slot.create_texture(device, image.extent());
         {
             let start = std::time::Instant::now();
@@ -215,25 +214,20 @@ impl FeatureExtractorPipeline {
 
         // Gets contents of buffer
 
-        {
+        let out = {
             let read_buffer_view = read_buffer_slice.get_mapped_range();
-            println!("Copying data from buffer into CPU...........");
-            let inst = std::time::Instant::now();
             let data_cpy: Vec<u8> = bytemuck::cast_slice::<_, f32>(&read_buffer_view)
                 .iter()
                 .map(|channel| (channel * 255.0) as u8)
                 .collect();
-            println!("Copied bytes back to the CPU in {:?}", std::time::Instant::now() - inst);
 
-            if let Some(out_img) =
-                image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(image.width(), image.height(), data_cpy)
-            {
-                out_img.save("blurred.png").unwrap();
-            } else {
-                println!("Could not make image from result!")
-            };
-        }
+            match image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(image.width(), image.height(), data_cpy) {
+                Some(img) => Ok(img),
+                None =>Err(format!("Copuld not make image form result!"))
+            }
+        };
 
         read_buffer.unmap();
+        out
     }
 }

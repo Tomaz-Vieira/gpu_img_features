@@ -88,5 +88,6 @@ fn main() {
         NonZeroU8::new(20u8).unwrap(),
     );
 
-    pipeline.process(&device, &queue, &img_rgba8);
+    let out_img = pipeline.process(&device, &queue, &img_rgba8).unwrap();
+    out_img.save("blurred.png").unwrap();
 }
