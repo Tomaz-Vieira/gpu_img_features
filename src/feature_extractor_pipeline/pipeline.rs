@@ -101,7 +101,7 @@ impl FeatureExtractorPipeline {
             }} //closes extract_features fn
         ").unwrap();
 
-        println!("{}", code);
+        // println!("{}", code);
         println!("With this sum: {kernel_sum}");
 
         let inst = std::time::Instant::now();
@@ -148,7 +148,11 @@ impl FeatureExtractorPipeline {
     ) /* -> image::ImageBuffer<image::Rgba<u8>, Vec<u8>> */
     {
         let input_texture = self.input_texture_slot.create_texture(device, image.extent());
-        input_texture.write_texture(queue, image);
+        {
+            let start = std::time::Instant::now();
+            input_texture.write_texture(queue, image);
+            println!("Uploaded texture in {:?}", std::time::Instant::now() - start);
+        }
 
         //FIXME: right now we are hardcoding that the output has 4 channels
         let num_channels = NumChannels(NonZeroU8::new(4).unwrap());
