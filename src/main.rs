@@ -88,6 +88,10 @@ fn main() {
         NonZeroU8::new(20u8).unwrap(),
     );
 
-    let out_img = pipeline.process(&device, &queue, &img_rgba8).unwrap();
-    out_img.save("blurred.png").unwrap();
+    {
+        let start = std::time::Instant::now();
+        let out_img = pipeline.process(&device, &queue, &img_rgba8).unwrap();
+        println!("Processed {:?} (3 channels) img in {:?}", img_rgba8.dimensions(), std::time::Instant::now() - start);
+        out_img.save("blurred.png").unwrap();
+    }
 }
