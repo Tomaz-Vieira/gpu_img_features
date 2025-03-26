@@ -1,8 +1,6 @@
-use std::{
-    fmt::Display,
-    num::{NonZeroU64, NonZeroU8},
-    ops::Deref,
-};
+use std::ops::Deref;
+use std::num::NonZeroU8;
+use std::fmt::Display;
 
 pub struct WorkgroupSize {
     pub x: u32,
@@ -19,7 +17,7 @@ impl Display for WorkgroupSize {
 pub trait Extent3dExt {
     fn num_dispatch_work_groups(&self, size: &WorkgroupSize) -> (u32, u32, u32);
     fn to_padded_buffer_size(&self, format: wgpu::TextureFormat) -> u32;
-    fn to_buffer_size(&self, num_channels: NumChannels) -> BufferSize;
+    fn to_buffer_size(&self, num_channels: NumChannels) -> wgpu::BufferSize;
 }
 impl Extent3dExt for wgpu::Extent3d {
     fn num_dispatch_work_groups(&self, size: &WorkgroupSize) -> (u32, u32, u32) {
@@ -41,11 +39,13 @@ impl Extent3dExt for wgpu::Extent3d {
 
         return padded_width * self.height;
     }
-    fn to_buffer_size(&self, num_channels: NumChannels) -> BufferSize {
+    fn to_buffer_size(&self, num_channels: NumChannels) -> wgpu::BufferSize {
         let num_chanels_u32: u32 = num_channels.into();
-        let bytes_per_channel = 4;
+        let bytes_per_channel = 4; //FIXME: is this the size of a f32?
 
-        BufferSize::from(self.width * self.height * self.depth_or_array_layers * num_chanels_u32 * bytes_per_channel)
+        wgpu::BufferSize::try_from(
+            u64::from(self.width * self.height * self.depth_or_array_layers * num_chanels_u32 * bytes_per_channel)
+        ).unwrap()
     }
 }
 
@@ -102,34 +102,5 @@ impl From<u8> for NumChannels {
 impl Into<u32> for NumChannels {
     fn into(self) -> u32 {
         return u32::from(u8::from(self.0));
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct BufferSize {
-    requested_size: NonZeroU64,
-    padded_size: NonZeroU64,
-}
-
-impl BufferSize {
-    pub fn new(requested_size: NonZeroU64) -> Self {
-        let missing_padding = u64::from(requested_size) % 256; //FIXME: use BIND_BUFFER_ALIGNMENT
-        let padded_size = NonZeroU64::new(u64::from(requested_size) + missing_padding).unwrap();
-        return Self {
-            requested_size,
-            padded_size,
-        };
-    }
-    pub fn requested_size(&self) -> NonZeroU64 {
-        self.requested_size
-    }
-    pub fn padded_size(&self) -> NonZeroU64 {
-        self.padded_size
-    }
-}
-impl From<u32> for BufferSize {
-    fn from(value: u32) -> Self {
-        let v = u64::from(value);
-        return Self::new(NonZeroU64::try_from(v).unwrap());
     }
 }

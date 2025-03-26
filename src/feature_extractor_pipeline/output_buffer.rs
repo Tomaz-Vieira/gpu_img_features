@@ -1,33 +1,6 @@
 use std::fmt::Display;
 
-use crate::util::{Binding, BufferSize, Group};
-
-pub struct OutputBuffer {
-    binding: Binding,
-    buffer: wgpu::Buffer,
-    size: BufferSize,
-}
-impl OutputBuffer {
-    pub fn size(&self) -> BufferSize {
-        return self.size;
-    }
-}
-
-impl OutputBuffer {
-    pub fn to_bind_group_entry(&self) -> wgpu::BindGroupEntry {
-        wgpu::BindGroupEntry {
-            binding: self.binding.into(),
-            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                buffer: &self.buffer,
-                offset: 0,
-                size: Some(self.size.requested_size().into()), //FIXME?
-            }),
-        }
-    }
-    pub fn raw(&self) -> &wgpu::Buffer {
-        return &self.buffer;
-    }
-}
+use crate::util::{Binding, Group};
 
 pub struct OutputBufferSlot {
     pub name: String,
@@ -35,22 +8,13 @@ pub struct OutputBufferSlot {
     pub binding: Binding,
 }
 impl OutputBufferSlot {
-    pub fn create_buffer(&self, device: &wgpu::Device, size: BufferSize) -> OutputBuffer {
-        let name = &self.name;
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(&format!("output_buffer__{name}")),
+    pub fn create_buffer(&self, device: &wgpu::Device, size: wgpu::BufferSize) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("output_buffer__{}", self.name)),
             mapped_at_creation: false,
-            size: size.padded_size().into(),
+            size: size.into(),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-        });
-        return OutputBuffer {
-            buffer,
-            size,
-            binding: self.binding,
-        };
-    }
-    pub fn name(&self) -> &str {
-        return &self.name;
+        })
     }
     pub fn to_binding_type(&self) -> wgpu::BindingType {
         wgpu::BindingType::Buffer {

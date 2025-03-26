@@ -84,7 +84,7 @@ fn main() {
         &[
             GaussianBlur{ sigma: 5.84089642 },
         ], //FIXME
-        NonZeroU8::new(20u8).unwrap(),
+        NonZeroU8::new(10u8).unwrap(),
     );
 
     pipeline.process(&device, &queue, &img_rgba8);

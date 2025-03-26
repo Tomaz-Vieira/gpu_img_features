@@ -2,12 +2,9 @@ use std::num::NonZeroU8;
 use std::fmt::Write;
 
 use encase::nalgebra::Vector3;
-use wgpu::{BindGroupDescriptor, BindGroupLayoutDescriptor, ShaderModuleDescriptor};
+use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
-use crate::{
-    feature_extractor_pipeline::reader_buffer::ReaderBuffer,
-    util::{Binding, Extent3dExt, Group, ImageBufferExt, NumChannels, WorkgroupSize},
-};
+use crate::util::{Binding, Extent3dExt, Group, ImageBufferExt, NumChannels, WorkgroupSize};
 
 use super::{input_texture::InputTextureSlot, kernel::gaussian_blur::GaussianBlur, output_buffer::OutputBufferSlot};
 
@@ -46,7 +43,7 @@ impl FeatureExtractorPipeline {
         };
 
         let input_name = input_texture_slot.name();
-        let output_name = output_buffer_slot.name();
+        let output_name = &output_buffer_slot.name;
         let mut code = String::with_capacity(1024 * 1024);
         write!(&mut code, "
             {input_texture_slot}
@@ -112,8 +109,7 @@ impl FeatureExtractorPipeline {
             label: Some("feature_extractor_comp_shader"),
             source: wgpu::ShaderSource::Wgsl(code.into()),
         });
-        let dur = std::time::Instant::now() - inst;
-        println!("How much time just to compile? {dur:?}");
+        println!("How much time just to compile? {:?}", std::time::Instant::now() - inst);
 
         let slots_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("feature_Extractor_slots_group_layout"),
@@ -159,12 +155,23 @@ impl FeatureExtractorPipeline {
         let output_buffer_size = image.extent().to_buffer_size(num_channels);
         println!("Output buffer will have {output_buffer_size:?} bytes");
         let output_buffer = self.output_buffer_slot.create_buffer(device, output_buffer_size);
-        let read_buffer = ReaderBuffer::new("my_read_buffer", &output_buffer, device);
+        let read_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("read_buffer"),
+            mapped_at_creation: false,
+            size: output_buffer_size.into(),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        });
 
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("binding_for_filter_pipeline"),
             layout: &self.slots_bind_group_layout,
-            entries: &[input_texture.to_bind_group_entry(), output_buffer.to_bind_group_entry()],
+            entries: &[
+                input_texture.to_bind_group_entry(),
+                wgpu::BindGroupEntry{
+                    binding: self.output_buffer_slot.binding.into(),
+                    resource: output_buffer.as_entire_binding(),
+                }
+            ],
         });
 
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -179,15 +186,23 @@ impl FeatureExtractorPipeline {
             compute_pass.set_pipeline(&self.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
             let (x, y, z) = image.extent().num_dispatch_work_groups(&self.workgroup_size);
+            println!("Dispatch workgrounps: x: {x} y: {y} z: {z}");
             compute_pass.dispatch_workgroups(x, y, z);
             // drop(compute_pass); //FIXME?: forcing pass to end here, I hope
         }
 
-        read_buffer.encode_copy(&mut command_encoder);
+        command_encoder.copy_buffer_to_buffer(
+            &output_buffer,
+            0,
+            &read_buffer,
+            0,
+            output_buffer_size.into(),
+        );
 
         queue.submit(Some(command_encoder.finish()));
 
-        read_buffer.map_async(wgpu::MapMode::Read, move |_| {
+        let read_buffer_slice = read_buffer.slice(..);
+        read_buffer_slice.map_async(wgpu::MapMode::Read, move |_| {
             //FIXME: check result and, if successul, set a condvar or something
             println!("buffer is mapped!");
         });
@@ -195,38 +210,26 @@ impl FeatureExtractorPipeline {
         device.poll(wgpu::Maintain::Wait);
 
         // Gets contents of buffer
-        let data = read_buffer.get_mapped_range();
-        println!("Copying data from buffer into CPU...........");
-        let data_cpy: Vec<u8> = bytemuck::cast_slice::<_, f32>(&data)
-            .iter()
-            .map(|channel| (channel * 255.0) as u8)
-            .collect();
 
-        if let Some(out_img) =
-            image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(image.width(), image.height(), data_cpy)
         {
-            out_img.save("blurred.png").unwrap();
-        } else {
-            println!("Could not make image from result!")
-        };
+            let read_buffer_view = read_buffer_slice.get_mapped_range();
+            println!("Copying data from buffer into CPU...........");
+            let inst = std::time::Instant::now();
+            let data_cpy: Vec<u8> = bytemuck::cast_slice::<_, f32>(&read_buffer_view)
+                .iter()
+                .map(|channel| (channel * 255.0) as u8)
+                .collect();
+            println!("Copied bytes back to the CPU in {:?}", std::time::Instant::now() - inst);
 
-        // With the current interface, we have to make sure all mapped views are
-        // dropped before we unmap the buffer.
-        drop(data);
-        read_buffer.unmap(); // Unmaps buffer from memory
-                             // If you are familiar with C++ these 2 lines can be thought of similarly to:
-                             //   delete myPointer;
-                             //   myPointer = NULL;
-                             // It effectively frees the memory
+            if let Some(out_img) =
+                image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(image.width(), image.height(), data_cpy)
+            {
+                out_img.save("blurred.png").unwrap();
+            } else {
+                println!("Could not make image from result!")
+            };
+        }
 
-        // let mapped_range = buffer_slice.get_mapped_range();
-
-        // {
-        //     if let Some(out_img) = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(image.width(), image.height(), mapped_range){
-        //         out_img.save("blurred.png").unwrap();
-        //     }else{
-        //         println!("Could not make image from result!")
-        //     };
-        // }
+        read_buffer.unmap();
     }
 }
