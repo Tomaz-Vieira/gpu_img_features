@@ -67,7 +67,8 @@ fn main() {
     .block_on()
     .expect("Failed to create device");
 
-    let img = image::io::Reader::open("./c_cells_1.png").unwrap().decode().unwrap();
+    // let img = image::io::Reader::open("./c_cells_1.png").unwrap().decode().unwrap();
+    let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
     let img_rgba8 = img.to_rgba8();
 
     let dims = img_rgba8.dimensions();
@@ -84,7 +85,7 @@ fn main() {
         &[
             GaussianBlur{ sigma: 5.84089642 },
         ], //FIXME
-        NonZeroU8::new(10u8).unwrap(),
+        NonZeroU8::new(20u8).unwrap(),
     );
 
     pipeline.process(&device, &queue, &img_rgba8);
