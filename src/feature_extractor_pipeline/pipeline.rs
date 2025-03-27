@@ -4,13 +4,13 @@ use std::fmt::Write;
 use encase::nalgebra::Vector3;
 use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
-use crate::util::{Binding, Extent3dExt, Group, ImageBufferExt, NumChannels, WorkgroupSize};
+use crate::{util::{Binding, Extent3dExt, Group, ImageBufferExt, NumChannels, WorkgroupSize}, wgsl::FVec4};
 
 use super::{input_texture::InputTextureSlot, kernel::gaussian_blur::GaussianBlur, output_buffer::OutputBufferSlot};
 
 pub struct FeatureExtractorPipeline {
     input_texture_slot: InputTextureSlot,
-    output_buffer_slot: OutputBufferSlot,
+    output_buffer_slot: OutputBufferSlot<FVec4>,
     workgroup_size: WorkgroupSize,
     slots_bind_group_layout: wgpu::BindGroupLayout,
     pipeline: wgpu::ComputePipeline,
@@ -36,10 +36,11 @@ impl FeatureExtractorPipeline {
             wgpu::TextureSampleType::Float { filterable: false },
             input_texture_view_dimension,
         );
-        let output_buffer_slot = OutputBufferSlot{
+        let output_buffer_slot = OutputBufferSlot::<FVec4>{
             name: "output_features".into(),
             group: Group(0),
             binding: Binding(1),
+            marker: std::marker::PhantomData,
         };
 
         let input_name = input_texture_slot.name();

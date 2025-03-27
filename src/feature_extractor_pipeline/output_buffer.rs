@@ -1,13 +1,14 @@
-use std::fmt::Display;
+use std::{fmt::Display, marker::PhantomData};
 
-use crate::util::{Binding, Group};
+use crate::{util::{Binding, Group}, wgsl::ShaderTypeExt};
 
-pub struct OutputBufferSlot {
+pub struct OutputBufferSlot<T> {
     pub name: String,
     pub group: Group,
     pub binding: Binding,
+    pub marker: PhantomData<T>,
 }
-impl OutputBufferSlot {
+impl<T: ShaderTypeExt> OutputBufferSlot<T> {
     pub fn create_buffer(&self, device: &wgpu::Device, size: wgpu::BufferSize) -> wgpu::Buffer {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("output_buffer__{}", self.name)),
@@ -32,11 +33,15 @@ impl OutputBufferSlot {
         };
     }
 }
-impl Display for OutputBufferSlot {
+impl<T: ShaderTypeExt> Display for OutputBufferSlot<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = &self.name;
         let group = &self.group;
         let binding = &self.binding;
-        write!(f, "@group({group}) @binding({binding}) var<storage, read_write> {name} : array<vec4<f32>>;")
+        let element_type_name = T::wgsl_type_name();
+        write!(
+            f,
+            "@group({group}) @binding({binding}) var<storage, read_write> {name} : array<{element_type_name}>;",
+        )
     }
 }
