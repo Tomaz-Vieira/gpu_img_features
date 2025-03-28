@@ -1,7 +1,6 @@
 use std::num::NonZeroU8;
 use std::fmt::Write;
 
-use encase::nalgebra::Vector3;
 use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
 use crate::{util::{Binding, Extent3dExt, Group, ImageBufferExt, NumChannels, WorkgroupSize}, wgsl::FVec4};
@@ -10,21 +9,21 @@ use super::{input_texture::InputTextureSlot, kernel::gaussian_blur::GaussianBlur
 
 pub struct FeatureExtractorPipeline {
     input_texture_slot: InputTextureSlot,
-    kernel_buffer_slots: Vec<KernelBufferSlot<f32>>,
+    kernels_bind_group: wgpu::BindGroup,
     output_buffer_slot: OutputBufferSlot<FVec4>,
     workgroup_size: WorkgroupSize,
-    slots_bind_group_layout: wgpu::BindGroupLayout,
     pipeline: wgpu::ComputePipeline,
 }
 impl FeatureExtractorPipeline {
+    pub const INOUT_GROUP: Group = Group(0);
+    pub const KERNELS_GROUP: Group = Group(1);
+
     pub fn new(
         device: &wgpu::Device,
         tile_size: wgpu::Extent3d,
         workgroup_size: WorkgroupSize,
         kernels: Vec<GaussianBlur>,
-        radius: NonZeroU8,
     ) -> Self {
-        let radius: i32 = u8::from(radius) as i32;
         let input_texture_view_dimension = match tile_size.depth_or_array_layers {
             1 => wgpu::TextureViewDimension::D2,
             _ => wgpu::TextureViewDimension::D3,
@@ -32,14 +31,14 @@ impl FeatureExtractorPipeline {
 
         let input_texture_slot = InputTextureSlot::new(
             "input_image".into(),
-            Group(0),
+            Self::INOUT_GROUP,
             Binding(0),
             wgpu::TextureSampleType::Float { filterable: false },
             input_texture_view_dimension,
         );
         let output_buffer_slot = OutputBufferSlot::<FVec4>{
             name: "output_features".into(),
-            group: Group(0),
+            group: Self::INOUT_GROUP,
             binding: Binding(1),
             marker: std::marker::PhantomData,
         };
@@ -47,18 +46,23 @@ impl FeatureExtractorPipeline {
             .map(|(k_idx, kernel)| KernelBufferSlot::new(
                 device,
                 format!("kernel_{k_idx}"),
-                Group(0),
-                Binding(2),
+                Self::KERNELS_GROUP,
+                Binding(k_idx as u32),
                 kernel,
             ))
             .collect();
+        let kernel_buffer_slots_decls = kernel_buffer_slots.iter()
+            .map(|kbs| kbs.to_string())
+            .collect::<Vec<String>>()
+            .join("\n            ");
 
-        let input_name = input_texture_slot.name();
+        // let input_name = input_texture_slot.name();
         let output_name = &output_buffer_slot.name;
         let mut code = String::with_capacity(1024 * 1024);
         write!(&mut code, "
             {input_texture_slot}
             {output_buffer_slot}
+            {kernel_buffer_slots_decls}
 
             @compute {workgroup_size}
             fn extract_features(
@@ -67,23 +71,20 @@ impl FeatureExtractorPipeline {
                 let dimensions = textureDimensions(input_image);
                 let texture_upper_limit = vec2<i32>(dimensions.xy) - vec2<i32>(1, 1);
                 let current_coords = vec2<i32>(global_id.xy);
-        ").unwrap();
 
-        for (k_idx, kernel_slot) in kernel_buffer_slots.iter().enumerate(){
-            write!(&mut code, "
-                var acc_{k_idx}: vec3<f32> = vec3(0.0, 0.0, 0.0);
-            ").unwrap();
-        }
-    
-        write!(&mut code, "
                 if(global_id.x >= dimensions.x || global_id.y >= dimensions.y) {{
                     return;
                 }}
         ").unwrap();
 
+        for (k_idx, _kernel_slot) in kernel_buffer_slots.iter().enumerate(){
+            write!(&mut code, "
+                var acc_{k_idx}: vec3<f32> = vec3(0.0, 0.0, 0.0);
+            ").unwrap();
+        }
+
         let radius = kernel_buffer_slots[0].kernel().radius; //FIXME! assumes all kernels same size
         write!(&mut code, "
-                let sample = textureLoad(input_image, sample_coords, 0).xyz;
                 for (var y=-{radius}; y<={radius}; y++){{
                     for (var x=-{radius}; x<={radius}; x++){{
                         let offset = vec2<i32>(x, y);
@@ -92,60 +93,73 @@ impl FeatureExtractorPipeline {
                             clamp(current_coords.y + offset.y, 0, texture_upper_limit.y),
                         );
                         let sample = textureLoad(input_image, sample_coords, 0).xyz;
-        ");
+        ").unwrap();
 
         for (k_idx, kernel_slot) in kernel_buffer_slots.iter().enumerate(){
             let kernel_value_expr = kernel_slot.wgsl_kernel_value_at_center_offset("offset");
             write!(&mut code, "
                         acc_{k_idx} += sample * {kernel_value_expr};
-            ");
+            ").unwrap();
         }
 
         write!(&mut code, "
                     }} // close for x
                 }} // close for y
-        ").unwrap();
 
-        write!(&mut code, "
                 {output_name}[global_id.y * dimensions.x + global_id.x] = vec4<f32>(acc_0, 1.0); //FIXME!!!!!!! acc_<IDX>!!
             }} //closes extract_features fn
         ").unwrap();
 
-        // println!("{}", code);
-        println!("With this sum: {kernel_sum}");
+        println!("Shader code:\n{code}");
+        // panic!("check code");
 
-        let inst = std::time::Instant::now();
-        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("feature_extractor_comp_shader"),
-            source: wgpu::ShaderSource::Wgsl(code.into()),
+        let shader_module = {
+            let inst = std::time::Instant::now();
+            let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+                label: Some("feature_extractor_comp_shader"),
+                source: wgpu::ShaderSource::Wgsl(code.into()),
+            });
+            println!("How much time just to compile? {:?}", std::time::Instant::now() - inst);
+            shader_module
+        };
+
+        // ------------------ Layout --------------------
+        let inout_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("inout_group_layout"),
+            entries: &[
+                input_texture_slot.to_bind_group_layout_entry(),
+                output_buffer_slot.to_bind_group_layout_entry(),
+            ],
         });
-        println!("How much time just to compile? {:?}", std::time::Instant::now() - inst);
 
-        let mut entries = vec![
-            input_texture_slot.to_bind_group_layout_entry(),
-            output_buffer_slot.to_bind_group_layout_entry(),
-        ];
-        for k_slot in &kernel_buffer_slots{
-            entries.push(k_slot.to_bind_group_layout_entry());
-        }
-        
-        let slots_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("feature_Extractor_slots_group_layout"),
-            entries: &entries,
+        let kernels_uniforms_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor{
+            label: Some("kernels_group_layout"),
+            entries: &kernel_buffer_slots.iter()
+                .map(|kbs| kbs.to_bind_group_layout_entry())
+                .collect::<Vec<_>>()
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("feature_extractor_pipeline_layout"),
             push_constant_ranges: &[],
-            bind_group_layouts: &[&slots_bind_group_layout],
+            bind_group_layouts: &[
+                &inout_bind_group_layout,
+                &kernels_uniforms_bind_group_layout,
+            ],
         });
+        // ------------------ END Layout --------------------
 
         Self {
             input_texture_slot,
             output_buffer_slot,
             workgroup_size,
-            slots_bind_group_layout,
-            kernel_buffer_slots,
+            kernels_bind_group: device.create_bind_group(&wgpu::BindGroupDescriptor{
+                label: Some("kernels_unifors_group"),
+                layout: &kernels_uniforms_bind_group_layout,
+                entries: &kernel_buffer_slots.iter()
+                    .map(|kbs| kbs.to_bind_group_entry())
+                    .collect::<Vec<_>>()
+            }),
             pipeline: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some("my_pipeline"),
                 entry_point: Some("extract_features"),
@@ -181,15 +195,15 @@ impl FeatureExtractorPipeline {
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         });
 
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let inout_binding_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("binding_for_filter_pipeline"),
-            layout: &self.slots_bind_group_layout,
+            layout: &self.pipeline.get_bind_group_layout(Self::INOUT_GROUP.into()),
             entries: &[
                 input_texture.to_bind_group_entry(),
                 wgpu::BindGroupEntry{
                     binding: self.output_buffer_slot.binding.into(),
                     resource: output_buffer.as_entire_binding(),
-                }
+                },
             ],
         });
 
@@ -203,7 +217,8 @@ impl FeatureExtractorPipeline {
                 timestamp_writes: None, 
             });
             compute_pass.set_pipeline(&self.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
+            compute_pass.set_bind_group(Self::INOUT_GROUP.into(), &inout_binding_group, &[]);
+            compute_pass.set_bind_group(Self::KERNELS_GROUP.into(), &self.kernels_bind_group, &[]);
             let (x, y, z) = image.extent().num_dispatch_work_groups(&self.workgroup_size);
             println!("Dispatch workgrounps: x: {x} y: {y} z: {z}");
             compute_pass.dispatch_workgroups(x, y, z);

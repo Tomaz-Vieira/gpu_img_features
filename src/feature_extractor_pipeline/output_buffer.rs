@@ -1,7 +1,5 @@
 use std::{fmt::Display, marker::PhantomData};
 
-use encase::nalgebra::Vector3;
-
 use crate::{util::{Binding, Group}, wgsl::ShaderTypeExt};
 
 use super::kernel::gaussian_blur::GaussianBlur;
@@ -88,8 +86,8 @@ impl<T> KernelBufferSlot<T> {
     }
     pub fn wgsl_kernel_value_at_center_offset(&self, offset_variable: &str) -> String{
         let slot_name = &self.name;
-        let kernel_side_len = self.kernel.kernel_side_len();
-        format!("{slot_name}[{offset_variable}.y * {kernel_side_len} + {offset_variable}.x]")
+        let idx_expr = self.kernel.wgsl_linear_idx_from_yx_offset(offset_variable);
+        format!("{slot_name}[{idx_expr}]")
     }
     pub fn to_binding_type(&self) -> wgpu::BindingType {
         wgpu::BindingType::Buffer {
@@ -105,6 +103,12 @@ impl<T> KernelBufferSlot<T> {
             ty: self.to_binding_type(),
             visibility: wgpu::ShaderStages::COMPUTE,
         };
+    }
+    pub fn to_bind_group_entry(&self) -> wgpu::BindGroupEntry{
+        wgpu::BindGroupEntry{
+            binding: self.binding.into(),
+            resource: self.buffer.as_entire_binding(),
+        }
     }
 }
 impl<T: ShaderTypeExt> Display for KernelBufferSlot<T> {

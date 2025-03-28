@@ -2,8 +2,6 @@ pub mod feature_extractor_pipeline;
 pub mod util;
 pub mod wgsl;
 
-use std::num::NonZeroU8;
-
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
 use pollster::FutureExt;
 use util::{ImageBufferExt, WorkgroupSize};
@@ -82,10 +80,9 @@ fn main() {
             y: 16,
             z: 1,
         },
-        &[
-            GaussianBlur{ sigma: 5.84089642 },
-        ], //FIXME
-        NonZeroU8::new(20u8).unwrap(),
+        vec![
+            GaussianBlur{ sigma: 5.84089642, radius: 20 },
+        ],
     );
 
     {

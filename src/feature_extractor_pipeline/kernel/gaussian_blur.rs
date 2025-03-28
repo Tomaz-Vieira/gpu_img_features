@@ -1,6 +1,4 @@
-use encase::{nalgebra::{Vector2, Vector3}};
-
-use crate::feature_extractor_pipeline::output_buffer::KernelBufferSlot;
+use encase::nalgebra::Vector2;
 
 #[derive(Clone)]
 pub struct GaussianBlur {
@@ -32,22 +30,33 @@ impl GaussianBlur {
         return (1f32 / (PI * two_sigma_2)) * E.powf(exponent);
     }
     pub fn linear_idx_from_yx_offset(&self, offset: Vector2<i64>) -> usize{
-        let out = offset.y * self.kernel_side_len() as i64 + offset.x;
+        let y = offset.y + self.radius as i64;
+        let x = offset.x + self.radius as i64;
+        let out = y * self.kernel_side_len() as i64 + x;
         out.try_into().unwrap()
+    }
+    pub fn wgsl_linear_idx_from_yx_offset(&self, offset_var: &str) -> String{
+        let radius = self.radius;
+        let kernel_side_len = self.kernel_side_len();
+
+        let y = format!("({offset_var}.y + {radius})");
+        let x = format!("({offset_var}.x + {radius})");
+        format!("( {y} * {kernel_side_len}  + {x} )")
     }
     pub fn fill_slice_yx(&self, buffer: &mut [f32]){
         let iradius: i64 = self.radius.into();
-        let kernel_side: i64 = self.kernel_side_len().try_into().unwrap();
 
         let mut total: f32 = 0.0;
         for y in -iradius..=iradius{
             for x in -iradius..=iradius{
-                let index = usize::try_from(y * kernel_side + x).unwrap();
-                let val = self.kernel_at(Vector2::new(x, y));
+                let offset = Vector2::new(x, y);
+                let index = self.linear_idx_from_yx_offset(offset);
+                let val = self.kernel_at(offset);
                 buffer[index] = val;
                 total += val;
             }
         }
-        assert!(1.0 - total < 0.0001);
+        dbg!(total);
+        assert!(1.0 - total < 0.001);
     }
 }
