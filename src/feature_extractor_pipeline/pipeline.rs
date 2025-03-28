@@ -1,16 +1,17 @@
 use std::num::NonZeroU8;
 use std::fmt::Write;
 
+use encase::nalgebra::Vector4;
 use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
-use crate::{util::{Binding, Extent3dExt, Group, ImageBufferExt, NumChannels, WorkgroupSize}, wgsl::FVec4};
+use crate::util::{Binding, Extent3dExt, Group, ImageBufferExt, NumChannels, WorkgroupSize};
 
 use super::{input_texture::InputTextureSlot, kernel::gaussian_blur::GaussianBlur, output_buffer::{KernelBufferSlot, OutputBufferSlot}};
 
 pub struct FeatureExtractorPipeline {
     input_texture_slot: InputTextureSlot,
     kernels_bind_group: wgpu::BindGroup,
-    output_buffer_slot: OutputBufferSlot<FVec4>,
+    output_buffer_slot: OutputBufferSlot<Vector4<u32>>,
     workgroup_size: WorkgroupSize,
     pipeline: wgpu::ComputePipeline,
 }
@@ -36,7 +37,7 @@ impl FeatureExtractorPipeline {
             wgpu::TextureSampleType::Float { filterable: false },
             input_texture_view_dimension,
         );
-        let output_buffer_slot = OutputBufferSlot::<FVec4>{
+        let output_buffer_slot = OutputBufferSlot::<Vector4<u32>>{
             name: "output_features".into(),
             group: Self::INOUT_GROUP,
             binding: Binding(1),
@@ -106,7 +107,7 @@ impl FeatureExtractorPipeline {
                     }} // close for x
                 }} // close for y
 
-                {output_name}[global_id.y * dimensions.x + global_id.x] = vec4<f32>(acc_0, 1.0); //FIXME!!!!!!! acc_<IDX>!!
+                {output_name}[global_id.y * dimensions.x + global_id.x] = vec4<u32>(vec3<u32>(acc_0 * 255.0), 255); //FIXME!!!!!!! acc_<IDX>!!
             }} //closes extract_features fn
         ").unwrap();
 
@@ -247,9 +248,9 @@ impl FeatureExtractorPipeline {
 
         let out = {
             let read_buffer_view = read_buffer_slice.get_mapped_range();
-            let data_cpy: Vec<u8> = bytemuck::cast_slice::<_, f32>(&read_buffer_view)
+            let data_cpy: Vec<u8> = bytemuck::cast_slice::<_, u32>(&read_buffer_view)
                 .iter()
-                .map(|channel| (channel * 255.0) as u8)
+                .map(|channel| *channel as u8)
                 .collect();
 
             match image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(image.width(), image.height(), data_cpy) {

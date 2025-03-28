@@ -65,16 +65,21 @@ fn main() {
     .block_on()
     .expect("Failed to create device");
 
-    // let img = image::io::Reader::open("./c_cells_1.png").unwrap().decode().unwrap();
     let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
-    let img_rgba8 = img.to_rgba8();
+    let img1_rgba8 = img.to_rgba8();
+    
+    let img = image::io::Reader::open("./big2.png").unwrap().decode().unwrap();
+    let _img2_rgba8 = img.to_rgba8();
 
-    let dims = img_rgba8.dimensions();
+    let img = image::io::Reader::open("./big3.png").unwrap().decode().unwrap();
+    let _img3_rgba8 = img.to_rgba8();
+
+    let dims = img1_rgba8.dimensions();
     println!("Image has these dimensions:{:?} ", dims);
 
     let pipeline = FeatureExtractorPipeline::new(
         &device,
-        img_rgba8.extent(),
+        img1_rgba8.extent(),
         WorkgroupSize{
             x: 16,
             y: 16,
@@ -87,8 +92,8 @@ fn main() {
 
     {
         let start = std::time::Instant::now();
-        let out_img = pipeline.process(&device, &queue, &img_rgba8).unwrap();
-        println!("Processed {:?} (3 channels) img in {:?}", img_rgba8.dimensions(), std::time::Instant::now() - start);
+        let out_img = pipeline.process(&device, &queue, &img1_rgba8).unwrap();
+        println!("Processed {:?} (3 channels) img in {:?}", img1_rgba8.dimensions(), std::time::Instant::now() - start);
         out_img.save("blurred.png").unwrap();
     }
 }
