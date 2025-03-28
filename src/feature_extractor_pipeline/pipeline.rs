@@ -132,7 +132,7 @@ impl FeatureExtractorPipeline {
             ],
         });
 
-        let kernels_uniforms_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor{
+        let kernels_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor{
             label: Some("kernels_group_layout"),
             entries: &kernel_buffer_slots.iter()
                 .map(|kbs| kbs.to_bind_group_layout_entry())
@@ -144,7 +144,7 @@ impl FeatureExtractorPipeline {
             push_constant_ranges: &[],
             bind_group_layouts: &[
                 &inout_bind_group_layout,
-                &kernels_uniforms_bind_group_layout,
+                &kernels_bind_group_layout,
             ],
         });
         // ------------------ END Layout --------------------
@@ -155,7 +155,7 @@ impl FeatureExtractorPipeline {
             workgroup_size,
             kernels_bind_group: device.create_bind_group(&wgpu::BindGroupDescriptor{
                 label: Some("kernels_unifors_group"),
-                layout: &kernels_uniforms_bind_group_layout,
+                layout: &kernels_bind_group_layout,
                 entries: &kernel_buffer_slots.iter()
                     .map(|kbs| kbs.to_bind_group_entry())
                     .collect::<Vec<_>>()

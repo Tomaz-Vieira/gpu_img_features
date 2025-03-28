@@ -65,10 +65,10 @@ impl<T> KernelBufferSlot<T> {
         kernel: GaussianBlur,
     ) -> Self {
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(&format!("uniform_buffer__{name}")),
+            label: Some(&format!("kernel_buffer__{name}")),
             mapped_at_creation: true,
             size: kernel.required_size_in_bytes() as u64,
-            usage: wgpu::BufferUsages::UNIFORM,
+            usage: wgpu::BufferUsages::STORAGE,
         });
 
         {
@@ -91,7 +91,7 @@ impl<T> KernelBufferSlot<T> {
     }
     pub fn to_binding_type(&self) -> wgpu::BindingType {
         wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
+            ty: wgpu::BufferBindingType::Storage { read_only: true },
             has_dynamic_offset: false,
             min_binding_size: None, //FIXME?
         }
@@ -119,7 +119,7 @@ impl<T: ShaderTypeExt> Display for KernelBufferSlot<T> {
         let element_type_name = T::wgsl_type_name();
         write!(
             f,
-            "@group({group}) @binding({binding}) var<uniform> {name} : array<{element_type_name}>;",
+            "@group({group}) @binding({binding}) var<storage, read> {name} : array<{element_type_name}>;",
         )
     }
 }
