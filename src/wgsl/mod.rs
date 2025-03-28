@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use encase::nalgebra::{Vector2, Vector3, Vector4};
 use paste::paste;
 

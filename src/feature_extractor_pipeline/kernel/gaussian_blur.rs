@@ -1,11 +1,27 @@
-use encase::nalgebra::Vector3;
+use encase::{nalgebra::{Vector2, Vector3}};
 
+use crate::feature_extractor_pipeline::output_buffer::KernelBufferSlot;
+
+#[derive(Clone)]
 pub struct GaussianBlur {
     pub sigma: f32,
+    pub radius: u8,
 }
 
 impl GaussianBlur {
-    pub fn kernel_at(&self, center_offset: Vector3<i32>) -> f32 {
+    pub fn new(sigma: f32, kernel_radius: u8) -> Self{
+        Self{
+            sigma,
+            radius: kernel_radius,
+        }
+    }
+    pub fn kernel_side_len(&self) -> usize{
+        2 * usize::from(self.radius) + 1
+    }
+    pub fn required_size_in_bytes(&self) -> usize{
+        self.kernel_side_len().pow(2) * std::mem::size_of::<f32>()
+    }
+    pub fn kernel_at(&self, center_offset: Vector2<i64>) -> f32 {
         use std::f32::consts::{PI, E};
         
         let x_2 = (center_offset.x * center_offset.x) as f32;
@@ -15,24 +31,23 @@ impl GaussianBlur {
 
         return (1f32 / (PI * two_sigma_2)) * E.powf(exponent);
     }
-}
-
-#[test]
-fn test_gaussian() {
-    let gb = GaussianBlur {
-        sigma: 0.84089642,
-    };
-    let radius: i32 = 3;
-    let mut total: f32 = 0.0;
-
-    for y in -radius..=radius {
-        for x in -radius..=radius {
-            let kernel_entry = gb.kernel_at(Vector3::new(x, y, 1));
-            print!(" {kernel_entry:.16} |"); //FIXME: is 16 decimal places enough? sure isn't for doubles
-            total += kernel_entry;
-        }
-        println!("");
+    pub fn linear_idx_from_yx_offset(&self, offset: Vector2<i64>) -> usize{
+        let out = offset.y * self.kernel_side_len() as i64 + offset.x;
+        out.try_into().unwrap()
     }
+    pub fn fill_slice_yx(&self, buffer: &mut [f32]){
+        let iradius: i64 = self.radius.into();
+        let kernel_side: i64 = self.kernel_side_len().try_into().unwrap();
 
-    println!("Total: {total:.16}");
+        let mut total: f32 = 0.0;
+        for y in -iradius..=iradius{
+            for x in -iradius..=iradius{
+                let index = usize::try_from(y * kernel_side + x).unwrap();
+                let val = self.kernel_at(Vector2::new(x, y));
+                buffer[index] = val;
+                total += val;
+            }
+        }
+        assert!(1.0 - total < 0.0001);
+    }
 }
