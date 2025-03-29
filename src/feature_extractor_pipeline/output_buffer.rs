@@ -48,21 +48,21 @@ impl<T: ShaderTypeExt> Display for OutputBufferSlot<T> {
     }
 }
 
-pub struct KernelBufferSlot<T> {
+pub struct KernelBufferSlot<T, const KSIDE: usize> {
     name: String,
     group: Group,
     binding: Binding,
     marker: PhantomData<T>,
-    kernel: GaussianBlur,
+    kernel: GaussianBlur<KSIDE>,
     buffer: wgpu::Buffer,
 }
-impl<T> KernelBufferSlot<T> {
+impl<T, const KSIDE: usize> KernelBufferSlot<T, KSIDE> {
     pub fn new(
         device: &wgpu::Device,
         name: String,
         group: Group,
         binding: Binding,
-        kernel: GaussianBlur,
+        kernel: GaussianBlur<KSIDE>,
     ) -> Self {
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("kernel_buffer__{name}")),
@@ -73,15 +73,16 @@ impl<T> KernelBufferSlot<T> {
 
         {
             let mut bytes_slice = buffer.slice(..).get_mapped_range_mut();
-            let kernel_values = bytemuck::cast_slice_mut::<_, f32>(&mut bytes_slice);
-            kernel.fill_slice_yx(kernel_values);
+            let kernel_values: &mut [[f32; KSIDE]] = bytemuck::cast_slice_mut(&mut bytes_slice);
+            let sized: &mut [[f32; KSIDE]; KSIDE] = kernel_values.try_into().unwrap();
+            kernel.fill_slice_yx(sized);
         }
         buffer.unmap();
         Self{
             name, group, binding, buffer, kernel, marker: PhantomData,
         }
     }
-    pub fn kernel(&self) -> &GaussianBlur{
+    pub fn kernel(&self) -> &GaussianBlur<KSIDE> {
         &self.kernel
     }
     pub fn wgsl_kernel_value_at_center_offset(&self, offset_variable: &str) -> String{
@@ -111,7 +112,7 @@ impl<T> KernelBufferSlot<T> {
         }
     }
 }
-impl<T: ShaderTypeExt> Display for KernelBufferSlot<T> {
+impl<T: ShaderTypeExt, const KSIDE: usize> Display for KernelBufferSlot<T, KSIDE> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = &self.name;
         let group = &self.group;

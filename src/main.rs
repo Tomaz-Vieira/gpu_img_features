@@ -86,7 +86,7 @@ fn main() {
             z: 1,
         },
         vec![
-            GaussianBlur{ sigma: 5.84089642, radius: 20 },
+            GaussianBlur::<41>{ sigma: 5.84089642 },
         ],
     );
 

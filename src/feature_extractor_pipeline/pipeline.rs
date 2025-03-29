@@ -8,14 +8,14 @@ use crate::util::{Binding, Extent3dExt, Group, ImageBufferExt, NumChannels, Work
 
 use super::{input_texture::InputTextureSlot, kernel::gaussian_blur::GaussianBlur, output_buffer::{KernelBufferSlot, OutputBufferSlot}};
 
-pub struct FeatureExtractorPipeline {
+pub struct FeatureExtractorPipeline<const KSIDE: usize> {
     input_texture_slot: InputTextureSlot,
     kernels_bind_group: wgpu::BindGroup,
     output_buffer_slot: OutputBufferSlot<Vector4<u32>>,
     workgroup_size: WorkgroupSize,
     pipeline: wgpu::ComputePipeline,
 }
-impl FeatureExtractorPipeline {
+impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
     pub const INOUT_GROUP: Group = Group(0);
     pub const KERNELS_GROUP: Group = Group(1);
 
@@ -23,7 +23,7 @@ impl FeatureExtractorPipeline {
         device: &wgpu::Device,
         tile_size: wgpu::Extent3d,
         workgroup_size: WorkgroupSize,
-        kernels: Vec<GaussianBlur>,
+        kernels: Vec<GaussianBlur<KSIDE>>,
     ) -> Self {
         let input_texture_view_dimension = match tile_size.depth_or_array_layers {
             1 => wgpu::TextureViewDimension::D2,
@@ -43,7 +43,7 @@ impl FeatureExtractorPipeline {
             binding: Binding(1),
             marker: std::marker::PhantomData,
         };
-        let kernel_buffer_slots: Vec<KernelBufferSlot<f32>> = kernels.into_iter().enumerate()
+        let kernel_buffer_slots: Vec<KernelBufferSlot<f32, KSIDE>> = kernels.into_iter().enumerate()
             .map(|(k_idx, kernel)| KernelBufferSlot::new(
                 device,
                 format!("kernel_{k_idx}"),
@@ -84,7 +84,7 @@ impl FeatureExtractorPipeline {
             ").unwrap();
         }
 
-        let radius = kernel_buffer_slots[0].kernel().radius; //FIXME! assumes all kernels same size
+        let radius = kernel_buffer_slots[0].kernel().radius(); //FIXME! assumes all kernels same size
         write!(&mut code, "
                 for (var y=-{radius}; y<={radius}; y++){{
                     for (var x=-{radius}; x<={radius}; x++){{
