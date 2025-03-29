@@ -118,7 +118,7 @@ impl<const KSIDE: usize> Display for KernelBufferSlot< KSIDE> {
         let binding = &self.binding;
         write!(
             f,
-            "@group({group}) @binding({binding}) var<storage, read> {name} : array<array<f32, {KSIDE}>>;",
+            "@group({group}) @binding({binding}) var<storage, read> {name} : array<array<f32, {KSIDE}>, {KSIDE}>;",
         )
     }
 }
