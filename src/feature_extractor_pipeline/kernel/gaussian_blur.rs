@@ -36,13 +36,11 @@ impl<const KSIDE: usize> GaussianBlur<KSIDE> {
         let out = y * self.kernel_side_len() as i64 + x;
         out.try_into().unwrap()
     }
-    pub fn wgsl_linear_idx_from_yx_offset(&self, offset_var: &str) -> String{
+    pub fn wgsl_indexing_from_yx_offset(&self, offset_var: &str) -> String{
         let radius = self.radius();
-        let kernel_side_len = self.kernel_side_len();
-
         let y = format!("({offset_var}.y + {radius})");
         let x = format!("({offset_var}.x + {radius})");
-        format!("( {y} * {kernel_side_len}  + {x} )")
+        format!("[{y}][{x}]")
     }
     pub fn fill_slice_yx(&self, buffer: &mut [[f32; KSIDE]; KSIDE]){
         let iradius: i64 = self.radius().try_into().unwrap();

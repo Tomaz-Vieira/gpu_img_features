@@ -48,15 +48,14 @@ impl<T: ShaderTypeExt> Display for OutputBufferSlot<T> {
     }
 }
 
-pub struct KernelBufferSlot<T, const KSIDE: usize> {
+pub struct KernelBufferSlot<const KSIDE: usize> {
     name: String,
     group: Group,
     binding: Binding,
-    marker: PhantomData<T>,
     kernel: GaussianBlur<KSIDE>,
     buffer: wgpu::Buffer,
 }
-impl<T, const KSIDE: usize> KernelBufferSlot<T, KSIDE> {
+impl<const KSIDE: usize> KernelBufferSlot<KSIDE> {
     pub fn new(
         device: &wgpu::Device,
         name: String,
@@ -79,7 +78,7 @@ impl<T, const KSIDE: usize> KernelBufferSlot<T, KSIDE> {
         }
         buffer.unmap();
         Self{
-            name, group, binding, buffer, kernel, marker: PhantomData,
+            name, group, binding, buffer, kernel
         }
     }
     pub fn kernel(&self) -> &GaussianBlur<KSIDE> {
@@ -87,8 +86,8 @@ impl<T, const KSIDE: usize> KernelBufferSlot<T, KSIDE> {
     }
     pub fn wgsl_kernel_value_at_center_offset(&self, offset_variable: &str) -> String{
         let slot_name = &self.name;
-        let idx_expr = self.kernel.wgsl_linear_idx_from_yx_offset(offset_variable);
-        format!("{slot_name}[{idx_expr}]")
+        let idx_expr = self.kernel.wgsl_indexing_from_yx_offset(offset_variable);
+        format!("{slot_name}{idx_expr}")
     }
     pub fn to_binding_type(&self) -> wgpu::BindingType {
         wgpu::BindingType::Buffer {
@@ -112,15 +111,14 @@ impl<T, const KSIDE: usize> KernelBufferSlot<T, KSIDE> {
         }
     }
 }
-impl<T: ShaderTypeExt, const KSIDE: usize> Display for KernelBufferSlot<T, KSIDE> {
+impl<const KSIDE: usize> Display for KernelBufferSlot< KSIDE> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = &self.name;
         let group = &self.group;
         let binding = &self.binding;
-        let element_type_name = T::wgsl_type_name();
         write!(
             f,
-            "@group({group}) @binding({binding}) var<storage, read> {name} : array<{element_type_name}>;",
+            "@group({group}) @binding({binding}) var<storage, read> {name} : array<array<f32, {KSIDE}>>;",
         )
     }
 }

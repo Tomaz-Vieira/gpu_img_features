@@ -43,7 +43,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             binding: Binding(1),
             marker: std::marker::PhantomData,
         };
-        let kernel_buffer_slots: Vec<KernelBufferSlot<f32, KSIDE>> = kernels.into_iter().enumerate()
+        let kernel_buffer_slots: Vec<KernelBufferSlot<KSIDE>> = kernels.into_iter().enumerate()
             .map(|(k_idx, kernel)| KernelBufferSlot::new(
                 device,
                 format!("kernel_{k_idx}"),
