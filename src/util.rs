@@ -2,6 +2,8 @@ use std::ops::Deref;
 use std::num::NonZeroU8;
 use std::fmt::Display;
 
+use crate::wgsl::ShaderTypeExt;
+
 pub struct WorkgroupSize {
     pub x: u32,
     pub y: u32,
@@ -17,7 +19,8 @@ impl Display for WorkgroupSize {
 pub trait Extent3dExt {
     fn num_dispatch_work_groups(&self, size: &WorkgroupSize) -> (u32, u32, u32);
     fn to_padded_buffer_size(&self, format: wgpu::TextureFormat) -> u32;
-    fn to_buffer_size(&self, num_channels: NumChannels) -> wgpu::BufferSize;
+    fn to_buffer_size<ElmntTy: ShaderTypeExt>(&self) -> u64;
+    fn to_wgsl_array_type<ElmntTy: ShaderTypeExt>(&self) -> String;
 }
 impl Extent3dExt for wgpu::Extent3d {
     fn num_dispatch_work_groups(&self, size: &WorkgroupSize) -> (u32, u32, u32) {
@@ -39,13 +42,19 @@ impl Extent3dExt for wgpu::Extent3d {
 
         return padded_width * self.height;
     }
-    fn to_buffer_size(&self, num_channels: NumChannels) -> wgpu::BufferSize {
-        let num_chanels_u32: u32 = num_channels.into();
-        let bytes_per_channel = 4; //FIXME: is this the size of a f32?
+    fn to_buffer_size<ElmntTy: ShaderTypeExt>(&self) -> u64 {
+        let bytes_per_element = std::mem::size_of::<ElmntTy>() as u32;
+        eprintln!("Bytes per element of {}: {bytes_per_element}", std::any::type_name::<ElmntTy>());
+        u64::from(self.width * self.height * self.depth_or_array_layers * bytes_per_element)
+    }
+    fn to_wgsl_array_type<ElmntTy: ShaderTypeExt>(&self) -> String{
+        let element_type_name = ElmntTy::wgsl_type_name();
+        let Self{width, height, depth_or_array_layers: depth} = self;
 
-        wgpu::BufferSize::try_from(
-            u64::from(self.width * self.height * self.depth_or_array_layers * num_chanels_u32 * bytes_per_channel)
-        ).unwrap()
+        let x_array = format!("array<{element_type_name}, {width}>");
+        let y_array = format!("array<{x_array}, {height}>");
+        let z_array = format!("array<{y_array}, {depth}>");
+        z_array
     }
 }
 

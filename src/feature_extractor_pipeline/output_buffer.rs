@@ -1,21 +1,31 @@
 use std::{fmt::Display, marker::PhantomData};
 
-use crate::{util::{Binding, Group}, wgsl::ShaderTypeExt};
+use crate::{util::{Binding, Extent3dExt, Group}, wgsl::ShaderTypeExt};
 
 use super::kernel::gaussian_blur::GaussianBlur;
 
-pub struct OutputBufferSlot<T> {
+pub struct OutputBufferSlot<T, const KSIDE: usize> {
     pub name: String,
     pub group: Group,
     pub binding: Binding,
+    pub img_extent: wgpu::Extent3d,
+    pub kernels: Vec<GaussianBlur<KSIDE>>,
     pub marker: PhantomData<T>,
 }
-impl<T> OutputBufferSlot<T> {
-    pub fn create_buffer(&self, device: &wgpu::Device, size: wgpu::BufferSize) -> wgpu::Buffer {
+
+impl<T: ShaderTypeExt, const KSIDE: usize> OutputBufferSlot<T, KSIDE> {
+    #[allow(non_snake_case)]
+    pub fn wgsl_indexing_from_kernIdx_xyzOffset(&self, kern_idx_expr: &str, xyz_offset_expr: &str) -> String{
+        format!("[{kern_idx_expr}][{xyz_offset_expr}.z][{xyz_offset_expr}.y][{xyz_offset_expr}.x]")
+    }
+    pub fn output_buffer_size<ElmntTy: ShaderTypeExt>(&self) -> u64{
+        self.kernels.len() as u64 * self.img_extent.to_buffer_size::<ElmntTy>()
+    }
+    pub fn create_output_buffer<ElmntTy: ShaderTypeExt>(&self, device: &wgpu::Device) -> wgpu::Buffer {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("output_buffer__{}", self.name)),
             mapped_at_creation: false,
-            size: size.into(),
+            size: self.output_buffer_size::<ElmntTy>(),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
         })
     }
@@ -35,15 +45,17 @@ impl<T> OutputBufferSlot<T> {
         };
     }
 }
-impl<T: ShaderTypeExt> Display for OutputBufferSlot<T> {
+
+impl<T: ShaderTypeExt, const KSIDE: usize> Display for OutputBufferSlot<T, KSIDE>{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = &self.name;
         let group = &self.group;
         let binding = &self.binding;
-        let element_type_name = T::wgsl_type_name();
+        let img_array_type = self.img_extent.to_wgsl_array_type::<T>();
+        let num_kernels = self.kernels.len();
         write!(
             f,
-            "@group({group}) @binding({binding}) var<storage, read_write> {name} : array<{element_type_name}>;",
+            "@group({group}) @binding({binding}) var<storage, read_write> {name} : array<{img_array_type}, {num_kernels}>;",
         )
     }
 }

@@ -1,17 +1,20 @@
-use std::num::NonZeroU8;
+use core::num;
 use std::fmt::Write;
 
 use encase::nalgebra::Vector4;
+use image::Pixel;
 use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
-use crate::util::{Binding, Extent3dExt, Group, ImageBufferExt, NumChannels, WorkgroupSize};
+use crate::util::{Binding, Extent3dExt, Group, ImageBufferExt, WorkgroupSize};
 
-use super::{input_texture::InputTextureSlot, kernel::gaussian_blur::GaussianBlur, output_buffer::{KernelBufferSlot, OutputBufferSlot}};
+use super::input_texture::InputTextureSlot;
+use super::output_buffer::{KernelBufferSlot, OutputBufferSlot};
+use super::kernel::gaussian_blur::GaussianBlur;
 
 pub struct FeatureExtractorPipeline<const KSIDE: usize> {
     input_texture_slot: InputTextureSlot,
     kernels_bind_group: wgpu::BindGroup,
-    output_buffer_slot: OutputBufferSlot<Vector4<u32>>,
+    output_buffer_slot: OutputBufferSlot<Vector4<u32>, KSIDE>,
     workgroup_size: WorkgroupSize,
     pipeline: wgpu::ComputePipeline,
 }
@@ -24,6 +27,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         tile_size: wgpu::Extent3d,
         workgroup_size: WorkgroupSize,
         kernels: Vec<GaussianBlur<KSIDE>>,
+        img_extent: wgpu::Extent3d,
     ) -> Self {
         let input_texture_view_dimension = match tile_size.depth_or_array_layers {
             1 => wgpu::TextureViewDimension::D2,
@@ -37,19 +41,21 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             wgpu::TextureSampleType::Float { filterable: false },
             input_texture_view_dimension,
         );
-        let output_buffer_slot = OutputBufferSlot::<Vector4<u32>>{
+        let output_buffer_slot = OutputBufferSlot::<Vector4<u32>, KSIDE>{
             name: "output_features".into(),
             group: Self::INOUT_GROUP,
             binding: Binding(1),
+            img_extent,
+            kernels: kernels.clone(),
             marker: std::marker::PhantomData,
         };
-        let kernel_buffer_slots: Vec<KernelBufferSlot<KSIDE>> = kernels.into_iter().enumerate()
+        let kernel_buffer_slots: Vec<KernelBufferSlot<KSIDE>> = kernels.iter().enumerate()
             .map(|(k_idx, kernel)| KernelBufferSlot::new(
                 device,
                 format!("kernel_{k_idx}"),
                 Self::KERNELS_GROUP,
                 Binding(k_idx as u32),
-                kernel,
+                kernel.clone(),
             ))
             .collect();
         let kernel_buffer_slots_decls = kernel_buffer_slots.iter()
@@ -57,7 +63,6 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             .collect::<Vec<String>>()
             .join("\n            ");
 
-        // let input_name = input_texture_slot.name();
         let output_name = &output_buffer_slot.name;
         let mut code = String::with_capacity(1024 * 1024);
         write!(&mut code, "
@@ -106,8 +111,16 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         write!(&mut code, "
                     }} // close for x
                 }} // close for y
+        ").unwrap();
 
-                {output_name}[global_id.y * dimensions.x + global_id.x] = vec4<u32>(vec3<u32>(acc_0 * 255.0), 255); //FIXME!!!!!!! acc_<IDX>!!
+        for (k_idx, _kernel) in kernels.iter().enumerate() {
+            let output_indexing = output_buffer_slot.wgsl_indexing_from_kernIdx_xyzOffset(&k_idx.to_string(), "global_id");
+            write!(&mut code, "
+                {output_name}{output_indexing} = vec4<u32>(vec3<u32>(acc_0 * 255.0), 255); //FIXME!!!!!!! alpha channel!!
+            ").unwrap();
+        }
+
+        write!(&mut code, "
             }} //closes extract_features fn
         ").unwrap();
 
@@ -177,22 +190,24 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         queue: &wgpu::Queue,
         image: &image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     ) -> Result<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, String> {
-        let input_texture = self.input_texture_slot.create_texture(device, image.extent());
         {
-            let start = std::time::Instant::now();
-            input_texture.write_texture(queue, image);
-            println!("Uploaded texture in {:?}", std::time::Instant::now() - start);
+            let expected_extent = self.output_buffer_slot.img_extent;
+            let found_extent = image.extent();
+            if found_extent != expected_extent {
+                return Err(format!(
+                    "Expected image with extent {expected_extent:?}, found {found_extent:?}",
+                ))
+            }
         }
+        let input_texture = self.input_texture_slot.create_texture(device, image.extent());
+        input_texture.write_texture(queue, image);
 
-        //FIXME: right now we are hardcoding that the output has 4 channels
-        let num_channels = NumChannels(NonZeroU8::new(4).unwrap());
-        let output_buffer_size = image.extent().to_buffer_size(num_channels);
-        println!("Output buffer will have {output_buffer_size:?} bytes");
-        let output_buffer = self.output_buffer_slot.create_buffer(device, output_buffer_size);
+        //FIXME: hardcoding vec4, expecting it to always be a rgba image
+        let output_buffer = self.output_buffer_slot.create_output_buffer::<Vector4<f32>>(device);
         let read_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("read_buffer"),
             mapped_at_creation: false,
-            size: output_buffer_size.into(),
+            size: output_buffer.size(),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         });
 
@@ -231,7 +246,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             0,
             &read_buffer,
             0,
-            output_buffer_size.into(),
+            output_buffer.size(),
         );
 
         queue.submit(Some(command_encoder.finish()));

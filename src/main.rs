@@ -6,7 +6,6 @@ use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::
 use pollster::FutureExt;
 use util::{ImageBufferExt, WorkgroupSize};
 
-
 fn main() {
     // wgpu uses `log` for all of our logging, so we initialize a logger with the `env_logger` crate.
     //
@@ -88,6 +87,7 @@ fn main() {
         vec![
             GaussianBlur::<41>{ sigma: 5.84089642 },
         ],
+        img1_rgba8.extent(),
     );
 
     {
