@@ -14,7 +14,7 @@ use super::kernel::gaussian_blur::GaussianBlur;
 pub struct FeatureExtractorPipeline<const KSIDE: usize> {
     input_texture_slot: InputTextureSlot,
     kernels_bind_group: wgpu::BindGroup,
-    output_buffer_slot: OutputBufferSlot<Vector4<u32>, KSIDE>,
+    output_buffer_slot: OutputBufferSlot<Vector4<f32>, KSIDE>,
     workgroup_size: WorkgroupSize,
     pipeline: wgpu::ComputePipeline,
 }
@@ -41,7 +41,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             wgpu::TextureSampleType::Float { filterable: false },
             input_texture_view_dimension,
         );
-        let output_buffer_slot = OutputBufferSlot::<Vector4<u32>, KSIDE>{
+        let output_buffer_slot = OutputBufferSlot::<Vector4<f32>, KSIDE>{
             name: "output_features".into(),
             group: Self::INOUT_GROUP,
             binding: Binding(1),
@@ -116,7 +116,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         for (k_idx, _kernel) in kernels.iter().enumerate() {
             let output_indexing = output_buffer_slot.wgsl_indexing_from_kernIdx_xyzOffset(&k_idx.to_string(), "global_id");
             write!(&mut code, "
-                {output_name}{output_indexing} = vec4<u32>(vec3<u32>(acc_0 * 255.0), 255); //FIXME!!!!!!! alpha channel!!
+                {output_name}{output_indexing} = vec4(acc_{k_idx}, 1.0); //FIXME! hardcoded alpha channel!!
             ").unwrap();
         }
 
@@ -188,22 +188,22 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        image: &image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
-    ) -> Result<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, String> {
+        img: &image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+    ) -> Result<Vec<[f32; 4]>, String> {
         {
             let expected_extent = self.output_buffer_slot.img_extent;
-            let found_extent = image.extent();
+            let found_extent = img.extent();
             if found_extent != expected_extent {
                 return Err(format!(
                     "Expected image with extent {expected_extent:?}, found {found_extent:?}",
                 ))
             }
         }
-        let input_texture = self.input_texture_slot.create_texture(device, image.extent());
-        input_texture.write_texture(queue, image);
+        let input_texture = self.input_texture_slot.create_texture(device, img.extent());
+        input_texture.write_texture(queue, img);
 
         //FIXME: hardcoding vec4, expecting it to always be a rgba image
-        let output_buffer = self.output_buffer_slot.create_output_buffer::<Vector4<f32>>(device);
+        let output_buffer = self.output_buffer_slot.create_output_buffer(device);
         let read_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("read_buffer"),
             mapped_at_creation: false,
@@ -235,7 +235,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             compute_pass.set_pipeline(&self.pipeline);
             compute_pass.set_bind_group(Self::INOUT_GROUP.into(), &inout_binding_group, &[]);
             compute_pass.set_bind_group(Self::KERNELS_GROUP.into(), &self.kernels_bind_group, &[]);
-            let (x, y, z) = image.extent().num_dispatch_work_groups(&self.workgroup_size);
+            let (x, y, z) = img.extent().num_dispatch_work_groups(&self.workgroup_size);
             println!("Dispatch workgrounps: x: {x} y: {y} z: {z}");
             compute_pass.dispatch_workgroups(x, y, z);
             // drop(compute_pass); //FIXME?: forcing pass to end here, I hope
@@ -261,20 +261,13 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
 
         // Gets contents of buffer
 
-        let out = {
+        let out: Vec<[f32; 4]> = {
             let read_buffer_view = read_buffer_slice.get_mapped_range();
-            let data_cpy: Vec<u8> = bytemuck::cast_slice::<_, u32>(&read_buffer_view)
-                .iter()
-                .map(|channel| *channel as u8)
-                .collect();
-
-            match image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(image.width(), image.height(), data_cpy) {
-                Some(img) => Ok(img),
-                None =>Err(format!("Copuld not make image form result!"))
-            }
+            let data_cpy: Vec<[f32; 4]> = bytemuck::cast_slice::<_, _>(&read_buffer_view).to_owned();
+            data_cpy
         };
 
         read_buffer.unmap();
-        out
+        Ok(out)
     }
 }

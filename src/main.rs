@@ -18,6 +18,7 @@ fn main() {
     // This is what loads the vulkan/dx12/metal/opengl libraries.
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor{
         backends: wgpu::Backends::VULKAN,
+        // flags: wgpu::InstanceFlags::debugging(),
         ..Default::default()
     });
 
@@ -64,17 +65,26 @@ fn main() {
     .block_on()
     .expect("Failed to create device");
 
-    let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
+    let img = image::io::Reader::open("./c_cells_1.png").unwrap().decode().unwrap();
     let img1_rgba8 = img.to_rgba8();
     
-    let img = image::io::Reader::open("./big2.png").unwrap().decode().unwrap();
-    let _img2_rgba8 = img.to_rgba8();
+    // let img = image::io::Reader::open("./big2.png").unwrap().decode().unwrap();
+    // let _img2_rgba8 = img.to_rgba8();
 
-    let img = image::io::Reader::open("./big3.png").unwrap().decode().unwrap();
-    let _img3_rgba8 = img.to_rgba8();
+    // let img = image::io::Reader::open("./big3.png").unwrap().decode().unwrap();
+    // let _img3_rgba8 = img.to_rgba8();
 
     let dims = img1_rgba8.dimensions();
     println!("Image has these dimensions:{:?} ", dims);
+
+    const KERNEL_SIDE: usize = 11;
+    let kernels = vec![
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 1.0 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 3.0 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 5.0 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 10.0 },
+        // GaussianBlur::<KERNEL_SIDE>{ sigma: 4.84089642 },
+    ];
 
     let pipeline = FeatureExtractorPipeline::new(
         &device,
@@ -84,16 +94,37 @@ fn main() {
             y: 16,
             z: 1,
         },
-        vec![
-            GaussianBlur::<41>{ sigma: 5.84089642 },
-        ],
+        kernels.clone(),
         img1_rgba8.extent(),
     );
 
-    {
+    let features: Vec<[f32; 4]> = {
         let start = std::time::Instant::now();
-        let out_img = pipeline.process(&device, &queue, &img1_rgba8).unwrap();
-        println!("Processed {:?} (3 channels) img in {:?}", img1_rgba8.dimensions(), std::time::Instant::now() - start);
-        out_img.save("blurred.png").unwrap();
+        let features = pipeline.process(&device, &queue, &img1_rgba8).unwrap();
+        let x = img1_rgba8.width();
+        let y = img1_rgba8.height();
+        let num_kernels = kernels.len();
+        let time_diff = std::time::Instant::now() - start;
+        println!(
+            "Convolved a {x}x{y} (3 channels) image with {num_kernels} kernel(s) of {KERNEL_SIDE}x{KERNEL_SIDE} in {time_diff:?}"
+        );
+        features
+    };
+
+    for (kern_idx, _kernel) in kernels.iter().enumerate() {
+        let width = img1_rgba8.width();
+        let height = img1_rgba8.height();
+        let num_pixels = (width * height) as usize;
+        let img_slice = &features[(kern_idx * num_pixels)..(kern_idx + 1) * num_pixels];
+        let img_slice_f32: &[f32] = bytemuck::cast_slice(img_slice);
+        assert!(img_slice_f32.len() == num_pixels * 4);
+        assert!(img_slice_f32.len() == 697 * 520 * 4);
+
+        let rgba_u8 = img_slice_f32.iter()
+            .map(|channel| (*channel * 255.0) as u8)
+            .collect::<Vec<_>>();
+        let parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
+            .expect("Could not parse rgba u8 image!!!");
+        parsed.save(format!("blurred_{kern_idx}.png")).unwrap();
     }
 }

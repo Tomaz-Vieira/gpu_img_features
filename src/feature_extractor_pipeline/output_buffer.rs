@@ -18,14 +18,14 @@ impl<T: ShaderTypeExt, const KSIDE: usize> OutputBufferSlot<T, KSIDE> {
     pub fn wgsl_indexing_from_kernIdx_xyzOffset(&self, kern_idx_expr: &str, xyz_offset_expr: &str) -> String{
         format!("[{kern_idx_expr}][{xyz_offset_expr}.z][{xyz_offset_expr}.y][{xyz_offset_expr}.x]")
     }
-    pub fn output_buffer_size<ElmntTy: ShaderTypeExt>(&self) -> u64{
-        self.kernels.len() as u64 * self.img_extent.to_buffer_size::<ElmntTy>()
+    pub fn output_buffer_size(&self) -> u64{
+        self.kernels.len() as u64 * self.img_extent.to_buffer_size::<T>()
     }
-    pub fn create_output_buffer<ElmntTy: ShaderTypeExt>(&self, device: &wgpu::Device) -> wgpu::Buffer {
+    pub fn create_output_buffer(&self, device: &wgpu::Device) -> wgpu::Buffer {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("output_buffer__{}", self.name)),
             mapped_at_creation: false,
-            size: self.output_buffer_size::<ElmntTy>(),
+            size: self.output_buffer_size(),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
         })
     }
