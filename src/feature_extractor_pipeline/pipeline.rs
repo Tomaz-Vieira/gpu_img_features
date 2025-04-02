@@ -1,8 +1,6 @@
-use core::num;
 use std::fmt::Write;
 
 use encase::nalgebra::Vector4;
-use image::Pixel;
 use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
 use crate::util::{Binding, Extent3dExt, Group, ImageBufferExt, WorkgroupSize};
@@ -24,12 +22,11 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
 
     pub fn new(
         device: &wgpu::Device,
-        tile_size: wgpu::Extent3d,
         workgroup_size: WorkgroupSize,
         kernels: Vec<GaussianBlur<KSIDE>>,
         img_extent: wgpu::Extent3d,
     ) -> Self {
-        let input_texture_view_dimension = match tile_size.depth_or_array_layers {
+        let input_texture_view_dimension = match img_extent.depth_or_array_layers {
             1 => wgpu::TextureViewDimension::D2,
             _ => wgpu::TextureViewDimension::D3,
         };
@@ -254,7 +251,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         let read_buffer_slice = read_buffer.slice(..);
         read_buffer_slice.map_async(wgpu::MapMode::Read, move |_| {
             //FIXME: check result and, if successul, set a condvar or something
-            println!("buffer is mapped!");
+            // println!("buffer is mapped!");
         });
 
         device.poll(wgpu::Maintain::Wait);
