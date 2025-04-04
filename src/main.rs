@@ -153,13 +153,13 @@ fn main() {
                         let converted = img_slice_f32.iter()
                             .map(|channel| (*channel * 255.0) as u8)
                             .collect::<Vec<_>>();
-                        eprintln!("Converted img to u8 in {:?}", std::time::Instant::now() - start);
+                        eprintln!("Converted feature img to u8 in {:?}", std::time::Instant::now() - start);
                         converted
                     };
                     let parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
                         .expect("Could not parse rgba u8 image!!!");
                     // parsed.save(format!("blurred_t{img_idx:?}_{kern_idx}.png")).unwrap();
-                    eprintln!("blurred_t{img_idx:?}_{kern_idx}.png {}", parsed.width());
+                    // eprintln!("blurred_t{img_idx:?}_{kern_idx}.png {}", parsed.width());
                 }
             });
         });
