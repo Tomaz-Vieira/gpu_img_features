@@ -1,6 +1,7 @@
 pub mod feature_extractor_pipeline;
 pub mod util;
 pub mod wgsl;
+pub mod decision_tree;
 
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
 use pollster::FutureExt;
