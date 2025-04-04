@@ -45,14 +45,14 @@ impl<const KSIDE: usize> GaussianBlur<KSIDE> {
     pub fn fill_slice_yx(&self, buffer: &mut [[f32; KSIDE]; KSIDE]){
         let iradius: i64 = self.radius().try_into().unwrap();
 
-        let mut total: f32 = 0.0;
+        // let mut total: f32 = 0.0;
         for y in -iradius..=iradius{
             for x in -iradius..=iradius{
                 let val = self.kernel_at(Vector2::new(x, y));
                 let fixed_y = usize::try_from(y + iradius).unwrap();
                 let fixed_x = usize::try_from(x + iradius).unwrap();
                 buffer[fixed_y][fixed_x] = val;
-                total += val;
+                // total += val;
             }
         }
         // assert!(1.0 - total < 0.001);

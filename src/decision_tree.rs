@@ -6,10 +6,7 @@ use anyhow::{self as ah, Context};
 use graphviz_rust as gv;
 use graphviz_rust::dot_structures as gs;
 
-pub struct DecisionTree{
-    stmts: Vec<gs::Stmt>,
-}
-
+#[derive(Debug, Copy, Clone)]
 struct Decision{
     feature_idx: usize,
     threshold: f32,
@@ -35,7 +32,7 @@ impl Decision{
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct Prediction{
     class: usize,
 }
@@ -52,6 +49,13 @@ impl Prediction{
 
 ///////////////////////
 
+#[derive(Debug, Copy, Clone)]
+struct Edge{
+    origin: u32,
+    target: u32,
+}
+
+#[derive(Debug)]
 enum DecisionNode{
     Decision{
         decision: Decision,
@@ -59,6 +63,10 @@ enum DecisionNode{
         gt_child: Box<DecisionNode>,
     },
     Prediction(Prediction),
+}
+
+pub struct DecisionTree{
+    root: DecisionNode,
 }
 
 fn parse_vert(vert: &gs::Vertex) -> ah::Result<u32>{
@@ -69,14 +77,14 @@ fn parse_vert(vert: &gs::Vertex) -> ah::Result<u32>{
     node_id.to_string().parse::<u32>().context("Parsing vertex id")
 }
 
-fn parse_edge(edge: &gs::Edge) -> ah::Result<(u32, u32)>{
+fn parse_edge(edge: &gs::Edge) -> ah::Result<Edge>{
     let gs::EdgeTy::Pair(v1, v2) = &edge.ty else {
         return Err(ah::anyhow!("Don't know how to handle non-pair edges"))
     };
-    Ok((
-        parse_vert(v1)?,
-        parse_vert(v2)?
-    ))
+    Ok(Edge{
+        origin: parse_vert(v1)?,
+        target: parse_vert(v2)?,
+    })
 }
 
 impl DecisionTree{
@@ -96,12 +104,14 @@ impl DecisionTree{
             .collect::<ah::Result<_>>()?;
 
         let mut predictions = HashMap::<u32, Prediction>::new();
-        for s in &stmts{
+        let mut decisions = HashMap::<u32, Decision>::new();
+        'stmts: for s in &stmts{
             let gs::Stmt::Node(node) = s else {
                 continue;
             };
             let node_id = node.id.0.to_string().parse::<u32>().context("Parsing node Id of {node:?}")?;
-            let is_leaf = edges.iter().find(|(orig, _tgt)| *orig == node_id).is_some();
+            dbg!(node_id);
+            let is_leaf = edges.iter().find(|edge| edge.origin == node_id).is_none();
             let Some(label_attr) = node.attributes.iter().find(|attr| attr.0.to_string() == "label") else {
                 ah::bail!("Node has no label {node:?}");
             };
@@ -109,17 +119,52 @@ impl DecisionTree{
             let trimmed_label = raw_label.trim_matches('"');
             for label_attr in trimmed_label.split("\\n"){
                 if is_leaf{
-                    predictions.insert(node_id, Prediction::try_parse_label_attr(&label_attr)?{
-                        predictions.insert(node_id, prediction);
-                    }
-                }
-                if Decision::try_parse_label_attr(&label_attr)?.is_some(){ //decision nodes could be parsed as predicitons
-                    continue
+                    let Some(prediction) = Prediction::try_parse_label_attr(&label_attr)? else {
+                        continue
+                    };
+                    predictions.insert(node_id, prediction);
+                    continue 'stmts
+                } else {
+                    let Some(decision) = Decision::try_parse_label_attr(&label_attr)? else {
+                        continue
+                    };
+                    decisions.insert(node_id, decision);
+                    continue 'stmts
                 }
             }
+            ah::bail!("Could not parse statement {s:?}")
         }
 
-        dbg!(predictions);
+        dbg!(&predictions);
+        dbg!(&decisions);
+
+        fn build_tree(
+            node_id: u32,
+            edges: &[Edge],
+            predictions: &HashMap<u32, Prediction>,
+            decisions: &HashMap<u32, Decision>,
+        ) -> ah::Result<DecisionNode>{
+            if let Some(pred) = predictions.get(&node_id){
+                return Ok(DecisionNode::Prediction(*pred))
+            }
+            if let Some(dec) = decisions.get(&node_id){
+                //FIXME: assume first edge is the "True" one. Is this reliable?
+                let out_edges: [Edge; 2] = edges.iter()
+                    .filter(|edge| edge.origin == node_id)
+                    .cloned()
+                    .collect::<Vec<Edge>>()
+                    .try_into()
+                    .map_err(|_| ah::anyhow!("Expected two edges from {node_id}"))?;
+                return Ok(DecisionNode::Decision{
+                    decision: *dec,
+                    le_child: Box::new(build_tree(out_edges[0].target, edges, predictions, decisions)?),
+                    gt_child: Box::new(build_tree(out_edges[1].target, edges, predictions, decisions)?),
+                })
+            }
+            ah::bail!("Could not find node with id {node_id}");
+        }
+
+        dbg!(build_tree(0, &edges, &predictions, &decisions)?);
 
         Ok(Self{stmts})
     }
