@@ -65,9 +65,37 @@ enum DecisionNode{
     Prediction(Prediction),
 }
 
-pub struct DecisionTree{
-    root: DecisionNode,
+fn write_indent(writer: &mut impl std::fmt::Write, level: usize) -> Result<(), std::fmt::Error>{
+    for _ in 0..level{
+        write!(writer, "    ")?;
+    }
+    Ok(())
 }
+
+impl DecisionNode{
+    fn write_wgsl(&self, code: &mut impl std::fmt::Write, indent_level: usize) -> Result<(), std::fmt::Error>{
+        match self{
+            Self::Prediction(pred) => {
+                write_indent(code, indent_level)?;
+                write!(code, "classs_{}_score += 1;\n", pred.class)
+            },
+            Self::Decision { decision, le_child, gt_child } => {
+                let Decision { feature_idx, threshold } = decision;
+
+                write_indent(code, indent_level)?;
+                write!(code, "if feature_{feature_idx} <= {threshold} {{\n")?;
+                    le_child.write_wgsl(code, indent_level + 1)?;
+                write_indent(code, indent_level)?;
+                write!(code, "}} else {{\n")?;
+                    gt_child.write_wgsl(code, indent_level + 1)?;
+                write_indent(code, indent_level)?;
+                write!(code, "}}\n")?;
+                Ok(())
+            }
+        }
+    }
+}
+
 
 fn parse_vert(vert: &gs::Vertex) -> ah::Result<u32>{
     let gs::Vertex::N(node) = vert else{
@@ -85,6 +113,10 @@ fn parse_edge(edge: &gs::Edge) -> ah::Result<Edge>{
         origin: parse_vert(v1)?,
         target: parse_vert(v2)?,
     })
+}
+
+pub struct DecisionTree{
+    root: DecisionNode,
 }
 
 impl DecisionTree{
@@ -164,22 +196,28 @@ impl DecisionTree{
             ah::bail!("Could not find node with id {node_id}");
         }
 
-        dbg!(build_tree(0, &edges, &predictions, &decisions)?);
+        let root = build_tree(0, &edges, &predictions, &decisions)?;
+        dbg!(&root);
 
-        Ok(Self{stmts})
+        let mut code = String::new();
+        root.write_wgsl(&mut code, 0).context("Writing shader code")?;
+        eprintln!("Shader code:\n{code}");
+
+        let out = Ok(Self{root});
+        out
     }
 
-    pub fn write_wgsl(&self, out: &mut impl std::fmt::Write){
-        for stmt in &self.stmts{
-            // dbg!(stmt);
-        }
-    }
+    // pub fn write_wgsl(&self, out: &mut impl std::fmt::Write){
+    //     for stmt in &self.stmts{
+    //         // dbg!(stmt);
+    //     }
+    // }
 }
 
 
 #[test]
 fn test_decision_tree_parsing(){
-    let dt = DecisionTree::parse(r#"
+    let _dt = DecisionTree::parse(r#"
         digraph Tree {
             node [shape=box, fontname="helvetica"] ;
             edge [fontname="helvetica"] ;
@@ -194,7 +232,4 @@ fn test_decision_tree_parsing(){
             0 -> 4 [labeldistance=2.5, labelangle=-45, headlabel="False"] ;
         }
     "#).unwrap();
-
-    let mut out = String::new();
-    dt.write_wgsl(&mut out);
 }
