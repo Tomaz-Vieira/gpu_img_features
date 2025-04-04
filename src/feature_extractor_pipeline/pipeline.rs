@@ -39,7 +39,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             input_texture_view_dimension,
         );
         let output_buffer_slot = OutputBufferSlot::<Vector4<f32>, KSIDE>{
-            name: "output_features".into(),
+            name: "output_features_buf".into(),
             group: Self::INOUT_GROUP,
             binding: Binding(1),
             img_extent,
@@ -82,7 +82,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
 
         for (k_idx, _kernel_slot) in kernel_buffer_slots.iter().enumerate(){
             write!(&mut code, "
-                var acc_{k_idx}: vec3<f32> = vec3(0.0, 0.0, 0.0);
+                var feature_{k_idx}: vec3<f32> = vec3(0.0, 0.0, 0.0);
             ").unwrap();
         }
 
@@ -101,7 +101,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         for (k_idx, kernel_slot) in kernel_buffer_slots.iter().enumerate(){
             let kernel_value_expr = kernel_slot.wgsl_kernel_value_at_center_offset("offset");
             write!(&mut code, "
-                        acc_{k_idx} += sample * {kernel_value_expr};
+                        feature_{k_idx} += sample * {kernel_value_expr};
             ").unwrap();
         }
 
@@ -113,7 +113,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         for (k_idx, _kernel) in kernels.iter().enumerate() {
             let output_indexing = output_buffer_slot.wgsl_indexing_from_kernIdx_xyzOffset(&k_idx.to_string(), "global_id");
             write!(&mut code, "
-                {output_name}{output_indexing} = vec4(acc_{k_idx}, 1.0); //FIXME! hardcoded alpha channel!!
+                {output_name}{output_indexing} = vec4(feature_{k_idx}, 1.0); //FIXME! hardcoded alpha channel!!
             ").unwrap();
         }
 
