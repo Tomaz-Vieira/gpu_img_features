@@ -55,11 +55,11 @@ struct Edge{
 }
 
 #[derive(Debug)]
-enum DecisionNode{
+enum TreeNode{
     Decision{
         decision: Decision,
-        le_child: Box<DecisionNode>,
-        gt_child: Box<DecisionNode>,
+        le_child: Box<TreeNode>,
+        gt_child: Box<TreeNode>,
     },
     Prediction(Prediction),
 }
@@ -71,7 +71,15 @@ fn write_indent(writer: &mut impl std::fmt::Write, level: usize) -> Result<(), s
     Ok(())
 }
 
-impl DecisionNode{
+impl TreeNode{
+    pub fn highest_class_idx(&self) -> usize{
+        match self{
+            Self::Prediction(pred) => pred.class,
+            Self::Decision { le_child, gt_child, .. } => {
+                le_child.highest_class_idx().max(gt_child.highest_class_idx())
+            }
+        }
+    }
     fn write_wgsl(&self, code: &mut impl std::fmt::Write, indent_level: usize) -> Result<(), std::fmt::Error>{
         match self{
             Self::Prediction(pred) => {
@@ -118,10 +126,13 @@ fn parse_edge(edge: &gs::Edge) -> ah::Result<Edge>{
 
 pub struct DecisionTree{
     #[allow(dead_code)]
-    root: DecisionNode,
+    root: TreeNode,
 }
 
 impl DecisionTree{
+    pub fn highest_class_idx(&self) -> usize{
+        return self.root.highest_class_idx();
+    }
     pub fn parse(dot: &str) -> ah::Result<Self>{
         let graph: gs::Graph = gv::parse(dot)
             .map_err(|s| ah::anyhow!("Could not parse the dot syntax: {s}"))?;
@@ -144,7 +155,6 @@ impl DecisionTree{
                 continue;
             };
             let node_id = node.id.0.to_string().parse::<u32>().context("Parsing node Id of {node:?}")?;
-            dbg!(node_id);
             let is_leaf = edges.iter().find(|edge| edge.origin == node_id).is_none();
             let Some(label_attr) = node.attributes.iter().find(|attr| attr.0.to_string() == "label") else {
                 ah::bail!("Node has no label {node:?}");
@@ -169,17 +179,14 @@ impl DecisionTree{
             ah::bail!("Could not parse statement {s:?}")
         }
 
-        dbg!(&predictions);
-        dbg!(&decisions);
-
         fn build_tree(
             node_id: u32,
             edges: &[Edge],
             predictions: &HashMap<u32, Prediction>,
             decisions: &HashMap<u32, Decision>,
-        ) -> ah::Result<DecisionNode>{
+        ) -> ah::Result<TreeNode>{
             if let Some(pred) = predictions.get(&node_id){
-                return Ok(DecisionNode::Prediction(*pred))
+                return Ok(TreeNode::Prediction(*pred))
             }
             if let Some(dec) = decisions.get(&node_id){
                 //FIXME: assume first edge is the "True" one. Is this reliable?
@@ -189,7 +196,7 @@ impl DecisionTree{
                     .collect::<Vec<Edge>>()
                     .try_into()
                     .map_err(|_| ah::anyhow!("Expected two edges from {node_id}"))?;
-                return Ok(DecisionNode::Decision{
+                return Ok(TreeNode::Decision{
                     decision: *dec,
                     le_child: Box::new(build_tree(out_edges[0].target, edges, predictions, decisions)?),
                     gt_child: Box::new(build_tree(out_edges[1].target, edges, predictions, decisions)?),
@@ -199,12 +206,6 @@ impl DecisionTree{
         }
 
         let root = build_tree(0, &edges, &predictions, &decisions)?;
-        dbg!(&root);
-
-        let mut code = String::new();
-        root.write_wgsl(&mut code, 0).context("Writing shader code")?;
-        eprintln!("Shader code:\n{code}");
-
         let out = Ok(Self{root});
         out
     }
@@ -212,9 +213,16 @@ impl DecisionTree{
     pub fn write_wgsl(&self, out: &mut impl std::fmt::Write) -> Result<(), std::fmt::Error> {
         self.root.write_wgsl(out, 0)
     }
+}
 
-    pub fn from_dir(dir_name: &str) -> ah::Result<Vec<Self>>{
-        let mut out = Vec::new();
+pub struct RandomForest{
+    trees: Vec<DecisionTree>,
+    highest_class_idx: usize,
+}
+
+impl RandomForest{
+    pub fn from_dir(dir_name: &str) -> ah::Result<Self>{
+        let mut trees = Vec::new();
         for entry in std::fs::read_dir(dir_name).context(format!("Opening dir {dir_name}"))? {
             let entry = entry.context("reading dir entry")?;
             if !entry.file_type()?.is_file(){
@@ -226,10 +234,16 @@ impl DecisionTree{
                 continue
             }
             let raw_tree = std::fs::read_to_string(&path).context("reading file")?;
-            let tree = Self::parse(&raw_tree).context("parsing tree")?;
-            out.push(tree)
+            let tree = DecisionTree::parse(&raw_tree).context("parsing tree")?;
+            trees.push(tree)
         }
-        Ok(out)
+
+        let highest_class_idx = trees.iter()
+            .map(|t| t.highest_class_idx())
+            .max()
+            .ok_or(ah::anyhow!("Gettin forest num classes"))?;
+
+        Ok(Self{trees, highest_class_idx})
     }
 }
 

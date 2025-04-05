@@ -5,12 +5,15 @@ pub mod decision_tree;
 
 use std::time::Duration;
 
+use decision_tree::RandomForest;
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
 use pollster::FutureExt;
 use rand::RngCore;
-use util::{timeit, ImageBufferExt, WorkgroupSize};
+use util::{ImageBufferExt, WorkgroupSize};
 
 fn main() {
+    let forest: RandomForest = RandomForest::from_dir("./serialized_scikit_forests").unwrap();
+
     // wgpu uses `log` for all of our logging, so we initialize a logger with the `env_logger` crate.
     //
     // To change the log level, set the `RUST_LOG` environment variable. See the `env_logger`
