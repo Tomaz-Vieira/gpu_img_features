@@ -1,12 +1,13 @@
 use std::fmt::Write;
 
 use encase::nalgebra::Vector4;
+use indoc::writedoc;
 use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
-use crate::util::{Binding, Extent3dExt, Group, ImageBufferExt, WorkgroupSize};
+use crate::util::{timeit, Binding, Extent3dExt, Group, ImageBufferExt, WorkgroupSize};
 
 use super::input_texture::InputTextureSlot;
-use super::output_buffer::{KernelBufferSlot, OutputBufferSlot};
+use super::output_buffer::{KernelsInBuffSlot, OutputBufferSlot};
 use super::kernel::gaussian_blur::GaussianBlur;
 
 pub struct FeatureExtractorPipeline<const KSIDE: usize> {
@@ -46,26 +47,19 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             kernels: kernels.clone(),
             marker: std::marker::PhantomData,
         };
-        let kernel_buffer_slots: Vec<KernelBufferSlot<KSIDE>> = kernels.iter().enumerate()
-            .map(|(k_idx, kernel)| KernelBufferSlot::new(
-                device,
-                format!("kernel_{k_idx}"),
-                Self::KERNELS_GROUP,
-                Binding(k_idx as u32),
-                kernel.clone(),
-            ))
-            .collect();
-        let kernel_buffer_slots_decls = kernel_buffer_slots.iter()
-            .map(|kbs| kbs.to_string())
-            .collect::<Vec<String>>()
-            .join("\n            ");
-
+        let kernel_buffer_slot: KernelsInBuffSlot<KSIDE> = KernelsInBuffSlot::new(
+            device,
+            "in_buf_kernels".to_owned(),
+            Self::KERNELS_GROUP,
+            Binding(0),
+            kernels,
+        );
         let output_name = &output_buffer_slot.name;
         let mut code = String::with_capacity(1024 * 1024);
         write!(&mut code, "
             {input_texture_slot}
             {output_buffer_slot}
-            {kernel_buffer_slots_decls}
+            {kernel_buffer_slot}
 
             @compute {workgroup_size}
             fn extract_features(
@@ -80,59 +74,30 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
                 }}
         ").unwrap();
 
-        for (k_idx, _kernel_slot) in kernel_buffer_slots.iter().enumerate(){
-            write!(&mut code, "
-                var feature_{k_idx}: vec3<f32> = vec3(0.0, 0.0, 0.0);
-            ").unwrap();
-        }
+        kernel_buffer_slot.write_wgsl_feature_calcs(&mut code).unwrap();
 
-        let radius = kernel_buffer_slots[0].kernel().radius(); //FIXME! assumes all kernels same size
-        write!(&mut code, "
-                for (var y=-{radius}; y<={radius}; y++){{
-                    for (var x=-{radius}; x<={radius}; x++){{
-                        let offset = vec2<i32>(x, y);
-                        let sample_coords: vec2<i32> = vec2<i32>(
-                            clamp(current_coords.x + offset.x, 0, texture_upper_limit.x),
-                            clamp(current_coords.y + offset.y, 0, texture_upper_limit.y),
-                        );
-                        let sample = textureLoad(input_image, sample_coords, 0).xyz;
-        ").unwrap();
-
-        for (k_idx, kernel_slot) in kernel_buffer_slots.iter().enumerate(){
-            let kernel_value_expr = kernel_slot.wgsl_kernel_value_at_center_offset("offset");
-            write!(&mut code, "
-                        feature_{k_idx} += sample * {kernel_value_expr};
-            ").unwrap();
-        }
-
-        write!(&mut code, "
-                    }} // close for x
-                }} // close for y
-        ").unwrap();
-
-        for (k_idx, _kernel) in kernels.iter().enumerate() {
+        for (k_idx, _kernel) in kernel_buffer_slot.kernels().iter().enumerate() {
             let output_indexing = output_buffer_slot.wgsl_indexing_from_kernIdx_xyzOffset(&k_idx.to_string(), "global_id");
             write!(&mut code, "
-                {output_name}{output_indexing} = vec4(feature_{k_idx}, 1.0); //FIXME! hardcoded alpha channel!!
-            ").unwrap();
+                {output_name}{output_indexing} = vec4(feature_{k_idx}, 1.0); //FIXME! hardcoded alpha channel!!"
+            ).unwrap();
         }
 
         write!(&mut code, "
             }} //closes extract_features fn
         ").unwrap();
 
-        println!("Shader code:\n{code}");
-        // panic!("check code");
+        eprintln!("Shader code:");
+        for (line_idx, line) in code.lines().enumerate(){
+            eprintln!("{:03}{line}", line_idx + 1);
+        }
 
-        let shader_module = {
-            let inst = std::time::Instant::now();
-            let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+        let shader_module = timeit("compiling compute shader", ||{
+            device.create_shader_module(ShaderModuleDescriptor {
                 label: Some("feature_extractor_comp_shader"),
                 source: wgpu::ShaderSource::Wgsl(code.into()),
-            });
-            println!("How much time just to compile? {:?}", std::time::Instant::now() - inst);
-            shader_module
-        };
+            })
+        });
 
         // ------------------ Layout --------------------
         let inout_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -145,9 +110,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
 
         let kernels_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor{
             label: Some("kernels_group_layout"),
-            entries: &kernel_buffer_slots.iter()
-                .map(|kbs| kbs.to_bind_group_layout_entry())
-                .collect::<Vec<_>>()
+            entries: &[kernel_buffer_slot.to_bind_group_layout_entry()],
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -167,9 +130,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             kernels_bind_group: device.create_bind_group(&wgpu::BindGroupDescriptor{
                 label: Some("kernels_unifors_group"),
                 layout: &kernels_bind_group_layout,
-                entries: &kernel_buffer_slots.iter()
-                    .map(|kbs| kbs.to_bind_group_entry())
-                    .collect::<Vec<_>>()
+                entries: &[kernel_buffer_slot.to_bind_group_entry()],
             }),
             pipeline: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some("my_pipeline"),

@@ -122,7 +122,7 @@ fn main() {
 
 
     let start = std::time::Instant::now();
-    for (img_idx, input_img) in images.iter().enumerate(){
+    for (_img_idx, input_img) in images.iter().enumerate(){
         std::thread::scope(|s|{
             s.spawn(||{
                 // let input_img = &images[t];
@@ -156,7 +156,7 @@ fn main() {
                         eprintln!("Converted feature img to u8 in {:?}", std::time::Instant::now() - start);
                         converted
                     };
-                    let parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
+                    let _parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
                         .expect("Could not parse rgba u8 image!!!");
                     // parsed.save(format!("blurred_t{img_idx:?}_{kern_idx}.png")).unwrap();
                     // eprintln!("blurred_t{img_idx:?}_{kern_idx}.png {}", parsed.width());

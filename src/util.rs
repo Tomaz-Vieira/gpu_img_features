@@ -113,3 +113,13 @@ impl Into<u32> for NumChannels {
         return u32::from(u8::from(self.0));
     }
 }
+
+pub fn timeit<F, OUT>(task_name: &str, f: F) -> OUT
+where
+    F: FnOnce() -> OUT
+{
+    let start = std::time::Instant::now();
+    let out = f();
+    eprintln!("{task_name} took {:?}", std::time::Instant::now() - start);
+    out
+}

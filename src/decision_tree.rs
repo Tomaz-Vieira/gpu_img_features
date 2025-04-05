@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use anyhow::{self as ah, Context};
 
@@ -83,7 +82,9 @@ impl DecisionNode{
                 let Decision { feature_idx, threshold } = decision;
 
                 write_indent(code, indent_level)?;
-                write!(code, "if feature_{feature_idx} <= {threshold} {{\n")?;
+                let feature_var_idx = feature_idx / 3; //FIXME: assuming image is RGB
+                let feature_component_idx = feature_idx % 3; //FIXME: assuming image is RGB
+                write!(code, "if feature_{feature_var_idx}[{feature_component_idx}] <= {threshold} {{\n")?;
                     le_child.write_wgsl(code, indent_level + 1)?;
                 write_indent(code, indent_level)?;
                 write!(code, "}} else {{\n")?;
@@ -116,6 +117,7 @@ fn parse_edge(edge: &gs::Edge) -> ah::Result<Edge>{
 }
 
 pub struct DecisionTree{
+    #[allow(dead_code)]
     root: DecisionNode,
 }
 
