@@ -209,11 +209,28 @@ impl DecisionTree{
         out
     }
 
-    // pub fn write_wgsl(&self, out: &mut impl std::fmt::Write){
-    //     for stmt in &self.stmts{
-    //         // dbg!(stmt);
-    //     }
-    // }
+    pub fn write_wgsl(&self, out: &mut impl std::fmt::Write) -> Result<(), std::fmt::Error> {
+        self.root.write_wgsl(out, 0)
+    }
+
+    pub fn from_dir(dir_name: &str) -> ah::Result<Vec<Self>>{
+        let mut out = Vec::new();
+        for entry in std::fs::read_dir(dir_name).context(format!("Opening dir {dir_name}"))? {
+            let entry = entry.context("reading dir entry")?;
+            if !entry.file_type()?.is_file(){
+                continue
+            }
+            let path = entry.path();
+            let file_name = path.file_name().ok_or(ah::anyhow!("File had no file_name"))?;
+            if !file_name.to_string_lossy().starts_with("tree_"){
+                continue
+            }
+            let raw_tree = std::fs::read_to_string(&path).context("reading file")?;
+            let tree = Self::parse(&raw_tree).context("parsing tree")?;
+            out.push(tree)
+        }
+        Ok(out)
+    }
 }
 
 
