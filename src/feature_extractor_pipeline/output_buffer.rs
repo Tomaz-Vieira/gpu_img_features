@@ -25,10 +25,12 @@ impl<T: ShaderTypeExt, const KSIDE: usize> OutputBufferSlot<T, KSIDE> {
         self.kernels.len() as u64 * self.img_extent.to_buffer_size::<T>()
     }
     pub fn create_output_buffer(&self, device: &wgpu::Device) -> wgpu::Buffer {
+        let size = self.output_buffer_size();
+        eprintln!("Gonna create an output buffer of size {size}");
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("output_buffer__{}", self.name)),
             mapped_at_creation: false,
-            size: self.output_buffer_size(),
+            size,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
         })
     }
