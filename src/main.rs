@@ -3,6 +3,8 @@ pub mod util;
 pub mod wgsl;
 pub mod decision_tree;
 
+use std::time::Duration;
+
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
 use pollster::FutureExt;
 use rand::RngCore;
@@ -121,6 +123,7 @@ fn main() {
     );
 
 
+    let mut total_time: Duration = Duration::ZERO;
     for (img_idx, input_img) in images.iter().enumerate(){
         // std::thread::scope(|s|{
         //     s.spawn(||{
@@ -128,12 +131,16 @@ fn main() {
                 let x = input_img.width();
                 let y = input_img.height();
                 let features: Vec<[f32; 4]> = {
-                    let features = timeit(
-                        &format!(
-                            "Convo a {x}x{y}x3c img with {num_kernels} kernel(s) of {KERNEL_SIDE}^2"
-                        ),
-                        || { pipeline.process(&device, &queue, input_img).unwrap() }
-                    );
+                    let features = {
+                        let start = std::time::Instant::now();
+                        let out = pipeline.process(&device, &queue, input_img).unwrap();
+                        let processing_time = std::time::Instant::now() - start;
+                        eprintln!(
+                            "Convo a {x}x{y}x3c img with {num_kernels} kernel(s) of {KERNEL_SIDE}^2 took {processing_time:?}"
+                        );
+                        total_time += processing_time;
+                        out
+                    };
                     features
                 };
 
@@ -146,11 +153,9 @@ fn main() {
                     assert!(img_slice_f32.len() == num_pixels * 4);
 
                     
-                    let rgba_u8: Vec<u8> = timeit("Converting feature img to u8", || {
-                        img_slice_f32.iter()
-                            .map(|channel| (*channel * 255.0) as u8)
-                            .collect::<Vec<_>>()
-                    });
+                    let rgba_u8: Vec<u8> = img_slice_f32.iter()
+                        .map(|channel| (*channel * 255.0) as u8)
+                        .collect::<Vec<_>>();
                     let parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
                         .expect("Could not parse rgba u8 image!!!");
                     parsed.save(format!("blurred_t{img_idx:?}_{kern_idx}.png")).unwrap();
@@ -159,4 +164,5 @@ fn main() {
         //     });
         // });
     }
+    eprintln!("Total processing time: {total_time:?}");
 }
