@@ -1,7 +1,6 @@
 use std::{fmt::Display, marker::PhantomData};
 
 use encase::nalgebra::Vector2;
-use indoc::{formatdoc, writedoc};
 
 use crate::{util::{Binding, Extent3dExt, Group}, wgsl::ShaderTypeExt};
 
