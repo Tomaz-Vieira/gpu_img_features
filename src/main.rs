@@ -6,7 +6,7 @@ pub mod decision_tree;
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
 use pollster::FutureExt;
 use rand::RngCore;
-use util::{ImageBufferExt, WorkgroupSize};
+use util::{timeit, ImageBufferExt, WorkgroupSize};
 
 fn main() {
     // wgpu uses `log` for all of our logging, so we initialize a logger with the `env_logger` crate.
@@ -75,16 +75,16 @@ fn main() {
     const NUM_IMAGES: usize = 1;
     const KERNEL_SIDE: usize = 41;
 
-    let images: Vec<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> = (0..NUM_IMAGES)
-        .map(|_| {
-            let mut bytes: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
-            rng.fill_bytes(&mut bytes);
-            image::ImageBuffer::from_raw(WIDTH as u32, HEIGHT as u32, bytes).unwrap()
-        })
-        .collect();
+    // let images: Vec<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> = (0..NUM_IMAGES)
+    //     .map(|_| {
+    //         let mut bytes: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
+    //         rng.fill_bytes(&mut bytes);
+    //         image::ImageBuffer::from_raw(WIDTH as u32, HEIGHT as u32, bytes).unwrap()
+    //     })
+    //     .collect();
 
-    // let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
-    // let img1_rgba8 = img.to_rgba8();
+    let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
+    let img1_rgba8 = img.to_rgba8();
     
     // let img = image::io::Reader::open("./big2.png").unwrap().decode().unwrap();
     // let img2_rgba8 = img.to_rgba8();
@@ -92,19 +92,19 @@ fn main() {
     // let img = image::io::Reader::open("./big3.png").unwrap().decode().unwrap();
     // let img3_rgba8 = img.to_rgba8();
 
-    // let images = [
-    //     img1_rgba8,
+    let images = [
+        img1_rgba8,
     //     img2_rgba8,
     //     img3_rgba8,
-    // ];
+    ];
 
     let dims = images[0].dimensions();
     println!("Image has these dimensions:{:?} ", dims);
 
     let kernels = vec![
-        GaussianBlur::<KERNEL_SIDE>{ sigma: 1.0 },
-        GaussianBlur::<KERNEL_SIDE>{ sigma: 3.0 },
-        GaussianBlur::<KERNEL_SIDE>{ sigma: 5.0 },
+        // GaussianBlur::<KERNEL_SIDE>{ sigma: 1.0 },
+        // GaussianBlur::<KERNEL_SIDE>{ sigma: 3.0 },
+        // GaussianBlur::<KERNEL_SIDE>{ sigma: 5.0 },
         GaussianBlur::<KERNEL_SIDE>{ sigma: 10.0 },
         // GaussianBlur::<KERNEL_SIDE>{ sigma: 4.84089642 },
     ];
@@ -122,19 +122,18 @@ fn main() {
 
 
     let start = std::time::Instant::now();
-    for (_img_idx, input_img) in images.iter().enumerate(){
-        std::thread::scope(|s|{
-            s.spawn(||{
-                // let input_img = &images[t];
+    for (img_idx, input_img) in images.iter().enumerate(){
+        // std::thread::scope(|s|{
+        //     s.spawn(||{
+                let num_kernels = kernels.len();
+                let x = input_img.width();
+                let y = input_img.height();
                 let features: Vec<[f32; 4]> = {
-                    let start = std::time::Instant::now();
-                    let features = pipeline.process(&device, &queue, input_img).unwrap();
-                    let x = input_img.width();
-                    let y = input_img.height();
-                    let num_kernels = kernels.len();
-                    let time_diff = std::time::Instant::now() - start;
-                    println!(
-                        "Convolved a {x}x{y} (3 channels) image with {num_kernels} kernel(s) of {KERNEL_SIDE}x{KERNEL_SIDE} in {time_diff:?}"
+                    let features = timeit(
+                        &format!(
+                            "Convo a {x}x{y}x3c img with {num_kernels} kernel(s) of {KERNEL_SIDE}^2"
+                        ),
+                        || { pipeline.process(&device, &queue, input_img).unwrap() }
                     );
                     features
                 };
@@ -148,21 +147,18 @@ fn main() {
                     assert!(img_slice_f32.len() == num_pixels * 4);
 
                     
-                    let rgba_u8: Vec<u8> = {
-                        let start = std::time::Instant::now();
-                        let converted = img_slice_f32.iter()
+                    let rgba_u8: Vec<u8> = timeit("Converting feature img to u8", || {
+                        img_slice_f32.iter()
                             .map(|channel| (*channel * 255.0) as u8)
-                            .collect::<Vec<_>>();
-                        eprintln!("Converted feature img to u8 in {:?}", std::time::Instant::now() - start);
-                        converted
-                    };
-                    let _parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
+                            .collect::<Vec<_>>()
+                    });
+                    let parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
                         .expect("Could not parse rgba u8 image!!!");
-                    // parsed.save(format!("blurred_t{img_idx:?}_{kern_idx}.png")).unwrap();
-                    // eprintln!("blurred_t{img_idx:?}_{kern_idx}.png {}", parsed.width());
+                    parsed.save(format!("blurred_t{img_idx:?}_{kern_idx}.png")).unwrap();
+                    eprintln!("blurred_t{img_idx:?}_{kern_idx}.png {}", parsed.width());
                 }
-            });
-        });
+        //     });
+        // });
     }
     eprintln!("Took {:?} to run all {} images",std::time::Instant::now() - start, images.len());
 
