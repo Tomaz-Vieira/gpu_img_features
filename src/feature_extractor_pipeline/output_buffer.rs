@@ -11,17 +11,16 @@ pub struct OutputBufferSlot<T, const KSIDE: usize> {
     pub group: Group,
     pub binding: Binding,
     pub img_extent: wgpu::Extent3d,
-    pub kernels: Vec<GaussianBlur<KSIDE>>,
     pub marker: PhantomData<T>,
 }
 
 impl<T: ShaderTypeExt, const KSIDE: usize> OutputBufferSlot<T, KSIDE> {
     #[allow(non_snake_case)]
-    pub fn wgsl_indexing_from_kernIdx_xyzOffset(&self, kern_idx_expr: &str, xyz_offset_expr: &str) -> String{
-        format!("[{kern_idx_expr}][{xyz_offset_expr}.z][{xyz_offset_expr}.y][{xyz_offset_expr}.x]")
+    pub fn wgsl_indexing_from_kernIdx_xyzOffset(&self, xyz_offset_expr: &str) -> String{
+        format!("[{xyz_offset_expr}.z][{xyz_offset_expr}.y][{xyz_offset_expr}.x]")
     }
     pub fn output_buffer_size(&self) -> u64{
-        self.kernels.len() as u64 * self.img_extent.to_buffer_size::<T>()
+        self.img_extent.to_buffer_size::<T>() //FIXME: assumes oiutput has same simensions as img? maybe this is ok
     }
     pub fn create_output_buffer(&self, device: &wgpu::Device) -> wgpu::Buffer {
         let size = self.output_buffer_size();
@@ -56,10 +55,10 @@ impl<T: ShaderTypeExt, const KSIDE: usize> Display for OutputBufferSlot<T, KSIDE
         let group = &self.group;
         let binding = &self.binding;
         let img_array_type = self.img_extent.to_wgsl_array_type::<T>();
-        let num_kernels = self.kernels.len();
         write!(
             f,
-            "@group({group}) @binding({binding}) var<storage, read_write> {name} : array<{img_array_type}, {num_kernels}>;",
+            "@group({group}) @binding({binding}) var<storage, read_write> {name} : {img_array_type};",
+            // "@group({group}) @binding({binding}) var<storage, read_write> {name} : array<{img_array_type}, {num_kernels}>;",
         )
     }
 }
@@ -142,7 +141,8 @@ impl<const KSIDE: usize> KernelsInBuffSlot<KSIDE> {
             ",
             self.kernels.iter().enumerate()
                 .map(|(k_idx, _kern)| format!("
-                        feature_{k_idx} += sample * {slot_name}[in_buf_kernels_offset + {k_idx}];"))
+                        //FIXME: ilastik features don't go from 0 to 1.0, but from 0.0 to 255.0, i think
+                        feature_{k_idx} += sample * {slot_name}[in_buf_kernels_offset + {k_idx}] * 255.0;"))
                 .collect::<Vec<_>>()
                 .join("")
         )

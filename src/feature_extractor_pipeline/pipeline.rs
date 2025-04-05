@@ -3,6 +3,7 @@ use std::fmt::Write;
 use encase::nalgebra::Vector4;
 use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
+use crate::decision_tree::RandomForest;
 use crate::util::{timeit, Binding, Extent3dExt, Group, ImageBufferExt, WorkgroupSize};
 
 use super::input_texture::InputTextureSlot;
@@ -24,8 +25,10 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         device: &wgpu::Device,
         workgroup_size: WorkgroupSize,
         kernels: Vec<GaussianBlur<KSIDE>>,
+        forest: RandomForest,
         img_extent: wgpu::Extent3d,
     ) -> Self {
+        assert!(forest.highest_feature_idx() + 1 == kernels.len() * 3);
         let input_texture_view_dimension = match img_extent.depth_or_array_layers {
             1 => wgpu::TextureViewDimension::D2,
             _ => wgpu::TextureViewDimension::D3,
@@ -43,7 +46,6 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             group: Self::INOUT_GROUP,
             binding: Binding(1),
             img_extent,
-            kernels: kernels.clone(),
             marker: std::marker::PhantomData,
         };
         let kernel_buffer_slot: KernelsInBuffSlot<KSIDE> = KernelsInBuffSlot::new(
@@ -75,12 +77,16 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
 
         kernel_buffer_slot.write_wgsl_feature_calcs(&mut code).unwrap();
 
-        for (k_idx, _kernel) in kernel_buffer_slot.kernels().iter().enumerate() {
-            let output_indexing = output_buffer_slot.wgsl_indexing_from_kernIdx_xyzOffset(&k_idx.to_string(), "global_id");
-            write!(&mut code, "
-                {output_name}{output_indexing} = vec4(feature_{k_idx}, 1.0); //FIXME! hardcoded alpha channel!!"
-            ).unwrap();
-        }
+        forest.write_wgsl(&mut code).unwrap();
+
+        let output_indexing = output_buffer_slot.wgsl_indexing_from_kernIdx_xyzOffset("global_id");
+        write!(&mut code, "
+            if class_0_score > class_1_score {{
+                {output_name}{output_indexing} = vec4(255.0, 0.0, 0.0, 1.0); //FIXME! hardcoded alpha channel!!
+            }} else {{
+                {output_name}{output_indexing} = vec4(0.0, 255.0, 0.0, 1.0); //FIXME! hardcoded alpha channel!!
+            }}"
+        ).unwrap();
 
         write!(&mut code, "
             }} //closes extract_features fn
@@ -88,7 +94,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
 
         eprintln!("Shader code:");
         for (line_idx, line) in code.lines().enumerate(){
-            eprintln!("{:03}{line}", line_idx + 1);
+            eprintln!("{:03} {line}", line_idx + 1);
         }
 
         let shader_module = timeit("compiling compute shader", ||{

@@ -12,7 +12,8 @@ use rand::RngCore;
 use util::{ImageBufferExt, WorkgroupSize};
 
 fn main() {
-    let forest: RandomForest = RandomForest::from_dir("./serialized_scikit_forests").unwrap();
+    let forest: RandomForest = RandomForest::from_dir("./10_feats_trees").unwrap();
+    eprintln!("HIgest feat idx is {}", forest.highest_feature_idx());
 
     // wgpu uses `log` for all of our logging, so we initialize a logger with the `env_logger` crate.
     //
@@ -89,7 +90,8 @@ fn main() {
         .collect();
 
     // let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
-    // let img1_rgba8 = img.to_rgba8();
+    let img = image::io::Reader::open("./c_cells_1_big.png").unwrap().decode().unwrap();
+    let img1_rgba8 = img.to_rgba8();
     
     // let img = image::io::Reader::open("./big2.png").unwrap().decode().unwrap();
     // let img2_rgba8 = img.to_rgba8();
@@ -97,21 +99,27 @@ fn main() {
     // let img = image::io::Reader::open("./big3.png").unwrap().decode().unwrap();
     // let img3_rgba8 = img.to_rgba8();
 
-    // let images = [
-    //     img1_rgba8,
+    let images = [
+        img1_rgba8,
     //     img2_rgba8,
     //     img3_rgba8,
-    // ];
+    ];
 
     let dims = images[0].dimensions();
     println!("Image has these dimensions:{:?} ", dims);
 
     let kernels = vec![
-        GaussianBlur::<KERNEL_SIDE>{ sigma: 1.0 },
-        // GaussianBlur::<KERNEL_SIDE>{ sigma: 3.0 },
-        // GaussianBlur::<KERNEL_SIDE>{ sigma: 5.0 },
-        // GaussianBlur::<KERNEL_SIDE>{ sigma: 10.0 },
-        // GaussianBlur::<KERNEL_SIDE>{ sigma: 4.84089642 },
+        // 0.3, 0.7, 0.9, 1.0, 1.6, 3.5, 4.0, 5.0, 7.0, 10.0
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 0.3 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 0.7 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 0.9, },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 1.0, },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 1.6 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 3.5 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 4.0 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 5.0 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 7.0 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 10.0 },
     ];
 
     let pipeline = FeatureExtractorPipeline::new(
@@ -122,6 +130,7 @@ fn main() {
             z: 1,
         },
         kernels.clone(),
+        forest,
         images[0].extent(),
     );
 
@@ -147,23 +156,21 @@ fn main() {
                     features
                 };
 
-                for (kern_idx, _kernel) in kernels.iter().enumerate() {
-                    let width = input_img.width();
-                    let height = input_img.height();
-                    let num_pixels = (width * height) as usize;
-                    let img_slice = &features[(kern_idx * num_pixels)..(kern_idx + 1) * num_pixels];
-                    let img_slice_f32: &[f32] = bytemuck::cast_slice(img_slice);
-                    assert!(img_slice_f32.len() == num_pixels * 4);
+                let width = input_img.width();
+                let height = input_img.height();
+                let num_pixels = (width * height) as usize;
+                let img_slice = &features[0..num_pixels];
+                let img_slice_f32: &[f32] = bytemuck::cast_slice(img_slice);
+                assert!(img_slice_f32.len() == num_pixels * 4);
 
-                    
-                    let rgba_u8: Vec<u8> = img_slice_f32.iter()
-                        .map(|channel| (*channel * 255.0) as u8)
-                        .collect::<Vec<_>>();
-                    let parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
-                        .expect("Could not parse rgba u8 image!!!");
-                    parsed.save(format!("blurred_t{img_idx:?}_{kern_idx}.png")).unwrap();
-                    // eprintln!("blurred_t{img_idx:?}_{kern_idx}.png {}", parsed.width());
-                }
+                
+                let rgba_u8: Vec<u8> = img_slice_f32.iter()
+                    .map(|channel| (*channel * 255.0) as u8)
+                    .collect::<Vec<_>>();
+                let parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
+                    .expect("Could not parse rgba u8 image!!!");
+                parsed.save(format!("blurred_t{img_idx:?}.png")).unwrap();
+                // eprintln!("blurred_t{img_idx:?}_{kern_idx}.png {}", parsed.width());
         //     });
         // });
     }
