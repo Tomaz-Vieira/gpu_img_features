@@ -1,0 +1,4 @@
+- Copying an image within the CPI is like 5x faster than from the GPU
+	- So I guess it kinda makes sense that it's so slow to copy back from GPU
+- Also, copying within the CPU seems to be unphased by allocation
+	- that is, slice.to_owned() or copying into a preallocated Vec perform the same
