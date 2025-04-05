@@ -219,11 +219,11 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
 
         // Gets contents of buffer
 
-        let out: Vec<[f32; 4]> = {
+        let out: Vec<[f32; 4]> = timeit("copying data back from GPU", ||{
             let read_buffer_view = read_buffer_slice.get_mapped_range();
             let data_cpy: Vec<[f32; 4]> = bytemuck::cast_slice::<_, _>(&read_buffer_view).to_owned();
             data_cpy
-        };
+        });
 
         read_buffer.unmap();
         Ok(out)
