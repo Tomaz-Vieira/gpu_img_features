@@ -80,11 +80,23 @@ impl TreeNode{
             }
         }
     }
+    pub fn highest_feature_idx(&self) -> Option<usize>{
+        match self{
+            Self::Prediction(_) => None,
+            Self::Decision { le_child, gt_child, decision } => {
+                Some(
+                    decision.feature_idx
+                        .max(le_child.highest_feature_idx().unwrap_or(0))
+                        .max(gt_child.highest_feature_idx().unwrap_or(0))
+                )
+            }
+        }
+    }
     fn write_wgsl(&self, code: &mut impl std::fmt::Write, indent_level: usize) -> Result<(), std::fmt::Error>{
         match self{
             Self::Prediction(pred) => {
                 write_indent(code, indent_level)?;
-                write!(code, "classs_{}_score += 1;\n", pred.class)
+                write!(code, "class_{}_score += 1;\n", pred.class)
             },
             Self::Decision { decision, le_child, gt_child } => {
                 let Decision { feature_idx, threshold } = decision;
@@ -132,6 +144,9 @@ pub struct DecisionTree{
 impl DecisionTree{
     pub fn highest_class_idx(&self) -> usize{
         return self.root.highest_class_idx();
+    }
+    pub fn highest_feature_idx(&self) -> usize{
+        return self.root.highest_feature_idx().unwrap();
     }
     pub fn parse(dot: &str) -> ah::Result<Self>{
         let graph: gs::Graph = gv::parse(dot)
@@ -216,11 +231,26 @@ impl DecisionTree{
 }
 
 pub struct RandomForest{
+    #[allow(dead_code)]
     trees: Vec<DecisionTree>,
+    #[allow(dead_code)]
     highest_class_idx: usize,
+    highest_feature_idx: usize,
 }
 
 impl RandomForest{
+    pub fn highest_feature_idx(&self) -> usize{
+        self.highest_feature_idx
+    }
+    pub fn write_wgsl(&self, out: &mut impl std::fmt::Write) -> Result<(), std::fmt::Error> {
+        for class_idx in 0..=self.highest_class_idx{
+            write!(out, "var class_{class_idx}_score: u32 = 0;\n")?;
+        }
+        for tree in &self.trees{
+            tree.write_wgsl(out)?
+        }
+        Ok(())
+    }
     pub fn from_dir(dir_name: &str) -> ah::Result<Self>{
         let mut trees = Vec::new();
         for entry in std::fs::read_dir(dir_name).context(format!("Opening dir {dir_name}"))? {
@@ -243,7 +273,12 @@ impl RandomForest{
             .max()
             .ok_or(ah::anyhow!("Gettin forest num classes"))?;
 
-        Ok(Self{trees, highest_class_idx})
+        let highest_feature_idx = trees.iter()
+            .map(|t| t.highest_feature_idx())
+            .max()
+            .ok_or(ah::anyhow!("Getting forest highest feature idx"))?;
+
+        Ok(Self{trees, highest_class_idx, highest_feature_idx})
     }
 }
 
