@@ -75,16 +75,16 @@ fn main() {
     const NUM_IMAGES: usize = 1;
     const KERNEL_SIDE: usize = 41;
 
-    // let images: Vec<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> = (0..NUM_IMAGES)
-    //     .map(|_| {
-    //         let mut bytes: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
-    //         rng.fill_bytes(&mut bytes);
-    //         image::ImageBuffer::from_raw(WIDTH as u32, HEIGHT as u32, bytes).unwrap()
-    //     })
-    //     .collect();
+    let images: Vec<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> = (0..NUM_IMAGES)
+        .map(|_| {
+            let mut bytes: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
+            rng.fill_bytes(&mut bytes);
+            image::ImageBuffer::from_raw(WIDTH as u32, HEIGHT as u32, bytes).unwrap()
+        })
+        .collect();
 
-    let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
-    let img1_rgba8 = img.to_rgba8();
+    // let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
+    // let img1_rgba8 = img.to_rgba8();
     
     // let img = image::io::Reader::open("./big2.png").unwrap().decode().unwrap();
     // let img2_rgba8 = img.to_rgba8();
@@ -92,20 +92,20 @@ fn main() {
     // let img = image::io::Reader::open("./big3.png").unwrap().decode().unwrap();
     // let img3_rgba8 = img.to_rgba8();
 
-    let images = [
-        img1_rgba8,
+    // let images = [
+    //     img1_rgba8,
     //     img2_rgba8,
     //     img3_rgba8,
-    ];
+    // ];
 
     let dims = images[0].dimensions();
     println!("Image has these dimensions:{:?} ", dims);
 
     let kernels = vec![
-        // GaussianBlur::<KERNEL_SIDE>{ sigma: 1.0 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 1.0 },
         // GaussianBlur::<KERNEL_SIDE>{ sigma: 3.0 },
         // GaussianBlur::<KERNEL_SIDE>{ sigma: 5.0 },
-        GaussianBlur::<KERNEL_SIDE>{ sigma: 10.0 },
+        // GaussianBlur::<KERNEL_SIDE>{ sigma: 10.0 },
         // GaussianBlur::<KERNEL_SIDE>{ sigma: 4.84089642 },
     ];
 
@@ -121,7 +121,6 @@ fn main() {
     );
 
 
-    let start = std::time::Instant::now();
     for (img_idx, input_img) in images.iter().enumerate(){
         // std::thread::scope(|s|{
         //     s.spawn(||{
@@ -155,11 +154,9 @@ fn main() {
                     let parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
                         .expect("Could not parse rgba u8 image!!!");
                     parsed.save(format!("blurred_t{img_idx:?}_{kern_idx}.png")).unwrap();
-                    eprintln!("blurred_t{img_idx:?}_{kern_idx}.png {}", parsed.width());
+                    // eprintln!("blurred_t{img_idx:?}_{kern_idx}.png {}", parsed.width());
                 }
         //     });
         // });
     }
-    eprintln!("Took {:?} to run all {} images",std::time::Instant::now() - start, images.len());
-
 }
