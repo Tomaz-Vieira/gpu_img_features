@@ -2,3 +2,7 @@
 	- So I guess it kinda makes sense that it's so slow to copy back from GPU
 - Also, copying within the CPU seems to be unphased by allocation
 	- that is, slice.to_owned() or copying into a preallocated Vec perform the same
+- I think I might be doing something wrong in copying back, because it feels like copying TO the GPU is fast?
+	- I mean, I spend most of the processing time copying features back... aren't they the same size as the inpout?
+		- they are the same dimensions, but the image is uploaded as u8, not f32
+			- So it should take 4 times longer to bring it back when using a single kernel. This might be the case
