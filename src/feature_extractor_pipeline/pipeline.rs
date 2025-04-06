@@ -92,7 +92,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             }} //closes extract_features fn
         ").unwrap();
 
-        eprintln!("Shader code:");
+        // eprintln!("Shader code:");
         for (line_idx, line) in code.lines().enumerate(){
             eprintln!("{:03} {line}", line_idx + 1);
         }
