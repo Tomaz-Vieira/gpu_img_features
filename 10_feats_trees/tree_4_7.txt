@@ -1,0 +1,25 @@
+digraph Tree {
+node [shape=box, fontname="helvetica"] ;
+edge [fontname="helvetica"] ;
+0 [label="node #0\nx[7] <= 34.29228591918945\nsamples = 93\nvalue = [68, 71]\nclass = 1"] ;
+1 [label="node #1\nx[9] <= 15.246052265167236\nsamples = 51\nvalue = [66, 7]\nclass = 0"] ;
+0 -> 1 [labeldistance=2.5, labelangle=45, headlabel="True"] ;
+2 [label="node #2\nsamples = 6\nvalue = [0, 7]\nclass = 1"] ;
+1 -> 2 ;
+3 [label="node #3\nsamples = 45\nvalue = [66, 0]\nclass = 0"] ;
+1 -> 3 ;
+4 [label="node #4\nx[17] <= 0.7675677239894867\nsamples = 42\nvalue = [2, 64]\nclass = 1"] ;
+0 -> 4 [labeldistance=2.5, labelangle=-45, headlabel="False"] ;
+5 [label="node #5\nsamples = 1\nvalue = [1, 0]\nclass = 0"] ;
+4 -> 5 ;
+6 [label="node #6\nx[16] <= 33.81570243835449\nsamples = 41\nvalue = [1, 64]\nclass = 1"] ;
+4 -> 6 ;
+7 [label="node #7\nx[0] <= 16.466422080993652\nsamples = 2\nvalue = [1, 2]\nclass = 1"] ;
+6 -> 7 ;
+8 [label="node #8\nsamples = 1\nvalue = [0, 2]\nclass = 1"] ;
+7 -> 8 ;
+9 [label="node #9\nsamples = 1\nvalue = [1, 0]\nclass = 0"] ;
+7 -> 9 ;
+10 [label="node #10\nsamples = 39\nvalue = [0, 62]\nclass = 1"] ;
+6 -> 10 ;
+}
