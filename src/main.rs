@@ -25,7 +25,7 @@ fn main() {
     //
     // This is what loads the vulkan/dx12/metal/opengl libraries.
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor{
-        backends: wgpu::Backends::VULKAN,
+        backends: wgpu::Backends::METAL,
         // flags: wgpu::InstanceFlags::debugging(),
         ..Default::default()
     });
