@@ -78,7 +78,7 @@ fn main() {
     const HEIGHT: usize = 1024;
     const NUM_CHANNELS: usize = 4; //FIXME
     const NUM_IMAGES: usize = 1;
-    const KERNEL_SIDE: usize = 41;
+    const KERNEL_SIDE: usize = 73;
 
     let images: Vec<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> = (0..NUM_IMAGES)
         .map(|_| {
