@@ -3,24 +3,23 @@ pub mod util;
 pub mod wgsl;
 pub mod decision_tree;
 
-use std::time::Duration;
+use std::{thread::ScopedJoinHandle, time::Duration};
 
 use decision_tree::RandomForest;
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
 use pollster::FutureExt;
 use rand::RngCore;
 use util::{ImageBufferExt, WorkgroupSize};
+use wgpu::Extent3d;
 
-fn main() {
-    let forest: RandomForest = RandomForest::from_dir("./10_feats_trees").unwrap();
-    eprintln!("HIgest feat idx is {}", forest.highest_feature_idx());
+use clap::Parser;
 
-    // wgpu uses `log` for all of our logging, so we initialize a logger with the `env_logger` crate.
-    //
-    // To change the log level, set the `RUST_LOG` environment variable. See the `env_logger`
-    // documentation for more information.
-    env_logger::init();
 
+fn make_pipeline<const KSIDE: usize>(
+    forest: &RandomForest,
+    kernels: Vec<GaussianBlur<KSIDE>>,
+    img_extent: Extent3d,
+) -> FeatureExtractorPipeline<KSIDE> {
     // We first initialize an wgpu `Instance`, which contains any "global" state wgpu needs.
     //
     // This is what loads the vulkan/dx12/metal/opengl libraries.
@@ -72,13 +71,69 @@ fn main() {
     .block_on()
     .expect("Failed to create device");
 
+    FeatureExtractorPipeline::new(
+        device,
+        queue,
+        WorkgroupSize{
+            x: 16,
+            y: 16,
+            z: 1,
+        },
+        kernels,
+        forest,
+        img_extent,
+    )
+}
+
+/// Features + random forest on the GPU
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// side of the kernel to convolve
+    #[arg(long, default_value_t = 2048)]
+    kside: usize,
+
+    /// Numer of images to run through the pipeline
+    #[arg(long, default_value_t = 1)]
+    num_images: usize,
+}
+
+fn main() {
+    // wgpu uses `log` for all of our logging, so we initialize a logger with the `env_logger` crate.
+    //
+    // To change the log level, set the `RUST_LOG` environment variable. See the `env_logger`
+    // documentation for more information.
+    env_logger::init();
+
+    // let args = Args::parse();
+
+    let forest: RandomForest = RandomForest::from_dir("./10_feats_trees").unwrap();
+    eprintln!("HIgest feat idx is {}", forest.highest_feature_idx());
+
     let mut rng = rand::rng();
 
-    const WIDTH: usize = 1024;
-    const HEIGHT: usize = 1024;
+    const WIDTH: usize = 2048;
+    const HEIGHT: usize = 2048;
     const NUM_CHANNELS: usize = 4; //FIXME
     const NUM_IMAGES: usize = 1;
     const KERNEL_SIDE: usize = 73;
+
+
+    // let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
+    // let img = image::io::Reader::open("./c_cells_1_big.png").unwrap().decode().unwrap();
+    // let img1_rgba8 = img.to_rgba8();
+    
+    // let img = image::io::Reader::open("./big2.png").unwrap().decode().unwrap();
+    // let img2_rgba8 = img.to_rgba8();
+
+    // let img = image::io::Reader::open("./big3.png").unwrap().decode().unwrap();
+    // let img3_rgba8 = img.to_rgba8();
+
+    // let images = [
+    //     img1_rgba8,
+    //     img2_rgba8,
+    //     img3_rgba8,
+    // ];
 
     let images: Vec<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> = (0..NUM_IMAGES)
         .map(|_| {
@@ -87,22 +142,6 @@ fn main() {
             image::ImageBuffer::from_raw(WIDTH as u32, HEIGHT as u32, bytes).unwrap()
         })
         .collect();
-
-    // let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
-    let img = image::io::Reader::open("./c_cells_1_big.png").unwrap().decode().unwrap();
-    let img1_rgba8 = img.to_rgba8();
-    
-    // let img = image::io::Reader::open("./big2.png").unwrap().decode().unwrap();
-    // let img2_rgba8 = img.to_rgba8();
-
-    // let img = image::io::Reader::open("./big3.png").unwrap().decode().unwrap();
-    // let img3_rgba8 = img.to_rgba8();
-
-    let images = [
-        img1_rgba8,
-    //     img2_rgba8,
-    //     img3_rgba8,
-    ];
 
     let dims = images[0].dimensions();
     println!("Image has these dimensions:{:?} ", dims);
@@ -121,57 +160,54 @@ fn main() {
         GaussianBlur::<KERNEL_SIDE>{ sigma: 10.0 },
     ];
 
-    let pipeline = FeatureExtractorPipeline::new(
-        &device,
-        WorkgroupSize{
-            x: 16,
-            y: 16,
-            z: 1,
-        },
-        kernels.clone(),
-        forest,
-        images[0].extent(),
-    );
+    let num_kernels = kernels.len();
 
+    let pipelines: Vec<_> = (0..images.len())
+        .map(|_| make_pipeline(&forest, kernels.clone(), images[0].extent()))
+        .collect();
 
-    let mut total_time: Duration = Duration::ZERO;
-    for (img_idx, input_img) in images.iter().enumerate(){
-        // std::thread::scope(|s|{
-        //     s.spawn(||{
-                let num_kernels = kernels.len();
-                let x = input_img.width();
-                let y = input_img.height();
-                let features: Vec<[f32; 4]> = {
-                    let features = {
-                        let start = std::time::Instant::now();
-                        let out = pipeline.process(&device, &queue, input_img).unwrap();
-                        let processing_time = std::time::Instant::now() - start;
-                        eprintln!(
-                            "Convo a {x}x{y}x3c img with {num_kernels} kernel(s) of {KERNEL_SIDE}^2 took {processing_time:?}"
-                        );
-                        total_time += processing_time;
-                        out
+    std::thread::scope(|s|{
+        let join_handles: Vec<_> = images.iter()
+            .zip(pipelines.iter())
+            .enumerate()
+            .map(|(img_idx, (input_img, pipeline))| {
+                s.spawn(move ||{
+                    let x = input_img.width();
+                    let y = input_img.height();
+                    let processing_time: Duration;
+                    let features: Vec<[f32; 4]> = {
+                        let features = {
+                            let start = std::time::Instant::now();
+                            let out = pipeline.process(input_img).unwrap();
+                            processing_time = std::time::Instant::now() - start;
+                            eprintln!(
+                                "Convo a {x}x{y}x3c img with {num_kernels} kernel(s) of {KERNEL_SIDE}^2 took {processing_time:?}"
+                            );
+                            out
+                        };
+                        features
                     };
-                    features
-                };
 
-                let width = input_img.width();
-                let height = input_img.height();
-                let num_pixels = (width * height) as usize;
-                let img_slice = &features[0..num_pixels];
-                let img_slice_f32: &[f32] = bytemuck::cast_slice(img_slice);
-                assert!(img_slice_f32.len() == num_pixels * 4);
+                    let width = input_img.width();
+                    let height = input_img.height();
+                    let num_pixels = (width * height) as usize;
+                    let img_slice = &features[0..num_pixels];
+                    let img_slice_f32: &[f32] = bytemuck::cast_slice(img_slice);
+                    assert!(img_slice_f32.len() == num_pixels * 4);
 
-                
-                let rgba_u8: Vec<u8> = img_slice_f32.iter()
-                    .map(|channel| (*channel * 255.0) as u8)
-                    .collect::<Vec<_>>();
-                let parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
-                    .expect("Could not parse rgba u8 image!!!");
-                parsed.save(format!("blurred_t{img_idx:?}.png")).unwrap();
-                // eprintln!("blurred_t{img_idx:?}_{kern_idx}.png {}", parsed.width());
-        //     });
-        // });
-    }
-    eprintln!("Total processing time: {total_time:?}");
+        
+                    let rgba_u8: Vec<u8> = img_slice_f32.iter()
+                        .map(|channel| (*channel * 255.0) as u8)
+                        .collect::<Vec<_>>();
+                    let parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
+                        .expect("Could not parse rgba u8 image!!!");
+                    parsed.save(format!("blurred_t{img_idx:?}.png")).unwrap();
+                    // eprintln!("blurred_t{img_idx:?}_{kern_idx}.png {}", parsed.width());
+                    processing_time
+                })
+            })
+            .collect();
+            let total_proc_time: Duration = join_handles.into_iter().map(|handle| handle.join().unwrap()).sum();
+            eprintln!("Total processing time: {total_proc_time:?}");
+    });
 }

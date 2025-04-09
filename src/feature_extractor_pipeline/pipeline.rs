@@ -11,6 +11,8 @@ use super::output_buffer::{KernelsInBuffSlot, OutputBufferSlot};
 use super::kernel::gaussian_blur::GaussianBlur;
 
 pub struct FeatureExtractorPipeline<const KSIDE: usize> {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
     input_texture_slot: InputTextureSlot,
     kernels_bind_group: wgpu::BindGroup,
     output_buffer_slot: OutputBufferSlot<Vector4<f32>, KSIDE>,
@@ -22,10 +24,11 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
     pub const KERNELS_GROUP: Group = Group(1);
 
     pub fn new(
-        device: &wgpu::Device,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
         workgroup_size: WorkgroupSize,
         kernels: Vec<GaussianBlur<KSIDE>>,
-        forest: RandomForest,
+        forest: &RandomForest,
         img_extent: wgpu::Extent3d,
     ) -> Self {
         assert!(forest.highest_feature_idx() + 1 == kernels.len() * 3);
@@ -49,7 +52,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             marker: std::marker::PhantomData,
         };
         let kernel_buffer_slot: KernelsInBuffSlot<KSIDE> = KernelsInBuffSlot::new(
-            device,
+            &device,
             "in_buf_kernels".to_owned(),
             Self::KERNELS_GROUP,
             Binding(0),
@@ -145,12 +148,12 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 cache: None,
             }),
+            device,
+            queue,
         }
     }
     pub fn process(
         &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
         img: &image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     ) -> Result<Vec<[f32; 4]>, String> {
         {
@@ -162,19 +165,19 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
                 ))
             }
         }
-        let input_texture = self.input_texture_slot.create_texture(device, img.extent());
-        input_texture.write_texture(queue, img);
+        let input_texture = self.input_texture_slot.create_texture(&self.device, img.extent());
+        input_texture.write_texture(&self.queue, img);
 
         //FIXME: hardcoding vec4, expecting it to always be a rgba image
-        let output_buffer = self.output_buffer_slot.create_output_buffer(device);
-        let read_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let output_buffer = self.output_buffer_slot.create_output_buffer(&self.device);
+        let read_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("read_buffer"),
             mapped_at_creation: false,
             size: output_buffer.size(),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         });
 
-        let inout_binding_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let inout_binding_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("binding_for_filter_pipeline"),
             layout: &self.pipeline.get_bind_group_layout(Self::INOUT_GROUP.into()),
             entries: &[
@@ -186,7 +189,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             ],
         });
 
-        let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        let mut command_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("my_encoder_for_filtering"),
         });
 
@@ -212,7 +215,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             output_buffer.size(),
         );
 
-        queue.submit(Some(command_encoder.finish()));
+        self.queue.submit(Some(command_encoder.finish()));
 
         let read_buffer_slice = read_buffer.slice(..);
         read_buffer_slice.map_async(wgpu::MapMode::Read, move |_| {
@@ -220,7 +223,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             // println!("buffer is mapped!");
         });
 
-        device.poll(wgpu::Maintain::Wait);
+        self.device.poll(wgpu::Maintain::Wait);
 
         // Gets contents of buffer
 
