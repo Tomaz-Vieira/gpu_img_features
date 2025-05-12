@@ -65,8 +65,8 @@ fn make_pipeline<const KSIDE: usize>(
             required_features: wgpu::Features::empty(),
             required_limits: wgpu::Limits::downlevel_defaults(),
             memory_hints: wgpu::MemoryHints::MemoryUsage,
+            trace: wgpu::Trace::Off,
         },
-        None,
     )
     .block_on()
     .expect("Failed to create device");
