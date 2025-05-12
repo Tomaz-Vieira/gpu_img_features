@@ -1,4 +1,4 @@
-use std::{fmt::Display, marker::PhantomData};
+use std::{fmt::Display, marker::PhantomData, time::Instant};
 
 use nalgebra::Vector2;
 
@@ -87,6 +87,7 @@ impl<const KSIDE: usize> KernelsInBuffSlot<KSIDE> {
             usage: wgpu::BufferUsages::STORAGE,
         });
 
+        let start = Instant::now();
         {
             let mut bytes_slice = buffer.slice(..).get_mapped_range_mut();
             let kernel_values: &mut [f32] = bytemuck::cast_slice_mut(&mut bytes_slice);
@@ -102,6 +103,11 @@ impl<const KSIDE: usize> KernelsInBuffSlot<KSIDE> {
                 }
             }
         }
+        let duration = Instant::now() - start;
+        let bytes_per_s = buffer_byte_length as f64 / duration.as_secs_f64();
+        let megabytes_per_s = bytes_per_s / (1024.0 * 1024.0);
+        eprintln!("Copied {buffer_byte_length} bytes in {duration:?} ({megabytes_per_s:.0} MB/s)");
+
         buffer.unmap();
         Self{
             name, group, binding, buffer, kernels
