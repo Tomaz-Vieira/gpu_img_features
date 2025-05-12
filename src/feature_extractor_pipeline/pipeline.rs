@@ -223,7 +223,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             // println!("buffer is mapped!");
         });
 
-        self.device.poll(wgpu::PollType::Wait);
+        self.device.poll(wgpu::PollType::Wait).unwrap();
 
         // Gets contents of buffer
 

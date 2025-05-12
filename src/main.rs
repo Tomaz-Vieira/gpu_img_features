@@ -3,7 +3,7 @@ pub mod util;
 pub mod wgsl;
 pub mod decision_tree;
 
-use std::{thread::ScopedJoinHandle, time::Duration};
+use std::time::Duration;
 
 use decision_tree::RandomForest;
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
