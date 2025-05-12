@@ -9,7 +9,7 @@ use decision_tree::RandomForest;
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
 use pollster::FutureExt;
 use rand::RngCore;
-use util::{ImageBufferExt, WorkgroupSize};
+use util::{timeit, ImageBufferExt, WorkgroupSize};
 use wgpu::Extent3d;
 
 use clap::Parser;
@@ -135,6 +135,16 @@ fn main() {
     //     img3_rgba8,
     // ];
 
+    let mut test_source: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
+    rng.fill_bytes(&mut test_source);
+
+    let mut test_sink: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
+    timeit("copying from CPU to CPU", ||{
+        test_sink.clone_from_slice(&test_source);
+    });
+    let sum: u64 = test_sink.iter().map(|i| *i as u64).sum();
+    eprintln!("Sum os dummy vec: {sum}");
+    
     let images: Vec<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> = (0..NUM_IMAGES)
         .map(|_| {
             let mut bytes: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
