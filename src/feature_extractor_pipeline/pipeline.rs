@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::time::Instant;
 
 use nalgebra::Vector4;
 use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
@@ -218,7 +219,11 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         self.queue.submit(Some(command_encoder.finish()));
 
         let read_buffer_slice = read_buffer.slice(..);
+
+        let start_of_map_async = Instant::now();
         read_buffer_slice.map_async(wgpu::MapMode::Read, move |_| {
+            let time_until_mapping = Instant::now() - start_of_map_async;
+            eprintln!("Mapping the output buffer to CPU memory space (so, waiting for compute to finish?) took {time_until_mapping:?}");
             //FIXME: check result and, if successul, set a condvar or something
             // println!("buffer is mapped!");
         });
