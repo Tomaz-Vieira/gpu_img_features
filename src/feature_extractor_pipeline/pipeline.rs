@@ -97,9 +97,9 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         ").unwrap();
 
         // eprintln!("Shader code:");
-        for (line_idx, line) in code.lines().enumerate(){
-            eprintln!("{:03} {line}", line_idx + 1);
-        }
+        // for (line_idx, line) in code.lines().enumerate(){
+        //     eprintln!("{:03} {line}", line_idx + 1);
+        // }
 
         let shader_module = timeit("compiling compute shader", ||{
             device.create_shader_module(ShaderModuleDescriptor {
