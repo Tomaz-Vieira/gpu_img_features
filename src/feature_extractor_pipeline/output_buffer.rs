@@ -87,13 +87,14 @@ impl<const KSIDE: usize> KernelsInBuffSlot<KSIDE> {
             usage: wgpu::BufferUsages::STORAGE,
         });
 
-        let start = Instant::now();
         {
             let mut bytes_slice = buffer.slice(..).get_mapped_range_mut();
             let kernel_values: &mut [f32] = bytemuck::cast_slice_mut(&mut bytes_slice);
 
             let iradius = i64::try_from((KSIDE - 1) / 2).unwrap();
             let mut offset: usize = 0;
+
+            let start = Instant::now();
             for y in -iradius..=iradius{
                 for x in -iradius..=iradius{
                     for kern in &kernels{
@@ -102,10 +103,10 @@ impl<const KSIDE: usize> KernelsInBuffSlot<KSIDE> {
                     }
                 }
             }
+            let duration = Instant::now() - start;
+            let megabytes_per_s = MegsPerMs::from_num_bytes_duration(&*bytes_slice, duration);
+            eprintln!("Copied {buffer_byte_length} bytes form cpu to GPU in {duration:?} at {megabytes_per_s}");
         }
-        let duration = Instant::now() - start;
-        let megabytes_per_s = MegsPerMs::from_num_bytes_duration(buffer_byte_length, duration);
-        eprintln!("Copied {buffer_byte_length} bytes into GPU at {megabytes_per_s}");
 
         buffer.unmap();
         Self{

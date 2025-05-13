@@ -1,7 +1,8 @@
 use std::ops::Deref;
 use std::num::NonZeroU8;
 use std::fmt::Display;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use colored::Colorize;
 
 use crate::wgsl::ShaderTypeExt;
 
@@ -128,15 +129,62 @@ where
 pub struct MegsPerMs(f64);
 
 impl MegsPerMs{
-    pub fn from_num_bytes_duration(num_bytes: usize, duration: Duration) -> Self{
-        let bytes_per_ms = num_bytes as f64 / (duration.as_secs_f64() * 1000.0);
+    pub fn from_num_bytes_duration(num_bytes: impl Into<NumBytes>, duration: Duration) -> Self{
+        let bytes_per_ms = num_bytes.into().0 as f64 / (duration.as_secs_f64() * 1000.0);
         return Self(bytes_per_ms / (1024.0 * 1024.0))
     }
 }
 
 impl std::fmt::Display for MegsPerMs{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:.5} MB/ms ({:.0} MB/s)", self.0, self.0 * 1000.0)
+        write!(f, "{:.5} MB/ms", self.0)
     }
 }
+
+#[derive(Copy, Clone, Debug)]
+pub struct NumBytes(usize);
+
+impl std::fmt::Display for NumBytes{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out: f64 = self.0 as f64;
+        let mut num_divisions = 0;
+
+        while out > 1024.0 {
+            out /= 1024.0;
+            num_divisions += 1;
+        }
+
+        match num_divisions{
+            0 => write!(f, "{out:.1} B"),
+            1 => write!(f, "{out:.1} K"),
+            2 => write!(f, "{out:.1} M"),
+            3 => write!(f, "{out:.1} G"),
+            _ => panic!("this looks like too big of  a number: {}", self.0)
+        }
+    }
+}
+
+impl<T: Sized> From<&[T]> for NumBytes{
+    fn from(value: &[T]) -> Self {
+        return Self(value.len() * size_of::<T>())
+    }
+}
+
+pub fn copy_bytes<T: bytemuck::AnyBitPattern>(source: &[u8], descr: &str) -> Vec<T>{
+    let start = Instant::now();
+    let out: Vec<T> = bytemuck::cast_slice::<_, _>(source).to_owned();
+    let num_copied_bytes = NumBytes::from(out.as_slice());
+    let duration = Instant::now() - start;
+    let megs_per_ms = MegsPerMs::from_num_bytes_duration(num_copied_bytes, duration);
+    eprintln!(
+        "Copied {} {} in {} at {}",
+        num_copied_bytes.to_string().blue(),
+        descr.red(),
+        format!("{:.1}ms", (duration.as_secs_f64() * 1000.0)).blue(),
+        megs_per_ms.to_string().yellow()
+    );
+
+    out
+}
+
 

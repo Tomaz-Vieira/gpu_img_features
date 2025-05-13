@@ -5,7 +5,7 @@ use nalgebra::Vector4;
 use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
 use crate::decision_tree::RandomForest;
-use crate::util::{timeit, Binding, Extent3dExt, Group, ImageBufferExt, WorkgroupSize};
+use crate::util::{copy_bytes, timeit, Binding, Extent3dExt, Group, ImageBufferExt, MegsPerMs, WorkgroupSize};
 
 use super::input_texture::InputTextureSlot;
 use super::output_buffer::{KernelsInBuffSlot, OutputBufferSlot};
@@ -232,11 +232,11 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
 
         // Gets contents of buffer
 
-        let out: Vec<[f32; 4]> = timeit("copying data back from GPU", ||{
+        let out: Vec<[f32; 4]> = {
             let read_buffer_view = read_buffer_slice.get_mapped_range();
-            let data_cpy: Vec<[f32; 4]> = bytemuck::cast_slice::<_, _>(&read_buffer_view).to_owned();
+            let data_cpy: Vec<[f32; 4]> = copy_bytes(&read_buffer_view, "from GPU to cpu");
             data_cpy
-        });
+        };
 
         read_buffer.unmap();
         Ok(out)

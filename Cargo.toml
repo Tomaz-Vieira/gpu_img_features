@@ -20,3 +20,4 @@ indoc = "2.0.6"
 encase = { version = "0.10.0", features = ["nalgebra"] }
 nalgebra = "0.33.2"
 clap = { version = "4.5.35", features = ["derive"] }
+colored = "3.0.0"

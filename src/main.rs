@@ -9,7 +9,7 @@ use decision_tree::RandomForest;
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
 use pollster::FutureExt;
 use rand::RngCore;
-use util::{ImageBufferExt, MegsPerMs, WorkgroupSize};
+use util::{copy_bytes, ImageBufferExt, MegsPerMs, NumBytes, WorkgroupSize};
 use wgpu::Extent3d;
 
 use clap::Parser;
@@ -136,18 +136,11 @@ fn main() {
     // ];
 
     {
-        let mut test_source: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
+        let mut test_source: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS * size_of::<f32>()];
         rng.fill_bytes(&mut test_source);
-        let mut test_sink: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
+        // let mut test_sink: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
 
-        let cpu_copy_start = Instant::now();
-        test_sink.clone_from_slice(&test_source);
-        let cpu_copy_duration = Instant::now() - cpu_copy_start;
-        
-        let megs_per_ms = MegsPerMs::from_num_bytes_duration(test_sink.len(), cpu_copy_duration);
-        eprintln!("Copied {} bytes from cpu to cpu at {megs_per_ms}", test_sink.len());
-        let sum: u64 = test_sink.iter().map(|i| *i as u64).sum(); //use test_sink so copy isn't optimized away
-        eprintln!("Sum os dummy vec: {sum}");
+        let _aaa: Vec<[f32; 4]> = copy_bytes(&test_source, "from cpu to cpu");
     }
     
     let images: Vec<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> = (0..NUM_IMAGES)
