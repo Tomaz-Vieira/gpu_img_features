@@ -2,7 +2,7 @@ use std::{fmt::Display, marker::PhantomData, time::Instant};
 
 use nalgebra::Vector2;
 
-use crate::{util::{Binding, Extent3dExt, Group}, wgsl::ShaderTypeExt};
+use crate::{util::{Binding, Extent3dExt, Group, MegsPerMs}, wgsl::ShaderTypeExt};
 
 use super::kernel::gaussian_blur::GaussianBlur;
 
@@ -104,9 +104,8 @@ impl<const KSIDE: usize> KernelsInBuffSlot<KSIDE> {
             }
         }
         let duration = Instant::now() - start;
-        let bytes_per_s = buffer_byte_length as f64 / duration.as_secs_f64();
-        let megabytes_per_s = bytes_per_s / (1024.0 * 1024.0);
-        eprintln!("Copied {buffer_byte_length} bytes in {duration:?} ({megabytes_per_s:.0} MB/s)");
+        let megabytes_per_s = MegsPerMs::from_num_bytes_duration(buffer_byte_length, duration);
+        eprintln!("Copied {buffer_byte_length} bytes into GPU at {megabytes_per_s}");
 
         buffer.unmap();
         Self{

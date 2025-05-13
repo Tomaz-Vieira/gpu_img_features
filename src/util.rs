@@ -1,6 +1,7 @@
 use std::ops::Deref;
 use std::num::NonZeroU8;
 use std::fmt::Display;
+use std::time::Duration;
 
 use crate::wgsl::ShaderTypeExt;
 
@@ -44,7 +45,7 @@ impl Extent3dExt for wgpu::Extent3d {
     }
     fn to_buffer_size<ElmntTy: ShaderTypeExt>(&self) -> u64 {
         let bytes_per_element = std::mem::size_of::<ElmntTy>() as u32;
-        eprintln!("Bytes per element of {}: {bytes_per_element}", std::any::type_name::<ElmntTy>());
+        // eprintln!("Bytes per element of {}: {bytes_per_element}", std::any::type_name::<ElmntTy>());
         u64::from(self.width * self.height * self.depth_or_array_layers * bytes_per_element)
     }
     fn to_wgsl_array_type<ElmntTy: ShaderTypeExt>(&self) -> String{
@@ -123,3 +124,19 @@ where
     eprintln!("{task_name} took {:?}", std::time::Instant::now() - start);
     out
 }
+
+pub struct MegsPerMs(f64);
+
+impl MegsPerMs{
+    pub fn from_num_bytes_duration(num_bytes: usize, duration: Duration) -> Self{
+        let bytes_per_ms = num_bytes as f64 / (duration.as_secs_f64() * 1000.0);
+        return Self(bytes_per_ms / (1024.0 * 1024.0))
+    }
+}
+
+impl std::fmt::Display for MegsPerMs{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:.5} MB/ms ({:.0} MB/s)", self.0, self.0 * 1000.0)
+    }
+}
+
