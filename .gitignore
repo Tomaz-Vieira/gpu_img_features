@@ -1,3 +1,5 @@
+/.vscode
 /target
 /blurred*.png
 predictions.png
+/bench/out
