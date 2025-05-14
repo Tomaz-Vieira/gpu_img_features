@@ -93,7 +93,7 @@ fn main() {
     env_logger::init();
 
 
-    let forest: RandomForest = RandomForest::from_dir("./10_feats_trees").unwrap();
+    let forest: RandomForest = RandomForest::from_dir("./bench/out/benchmark_trees").unwrap();
     eprintln!("HIgest feat idx is {}", forest.highest_feature_idx());
 
 

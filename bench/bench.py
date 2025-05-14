@@ -104,16 +104,29 @@ def setup_target_image():
     iio.imwrite(inference_raw_path, img)
 
 
+
 def run_on_cpu(classifier):
     # The steps that the rust binary runs (be it on cpu or gpu) all need to be timed
     # I.e.: Load image, comput features, predict, write segmentation
+    print("Start CPU run")
     start = perf_counter()
+
     img = iio.imread(inference_raw_path)
+    t_imread = perf_counter()
+    print(f"Image read took {t_imread - start} seconds")
+    
     features = get_features(img)
+    t_featurecomp = perf_counter()
+    print(f"Feature computation took {t_featurecomp - t_imread} seconds")
+
     prediction = classifier.predict(features)
+    t_predict = perf_counter()
+    print(f"Prediction took {t_predict - t_featurecomp} seconds")
+
     iio.imwrite(cpu_seg_output_path, prediction.reshape(img.shape[0], img.shape[1]))
-    end = perf_counter()
-    return end - start
+    t_imwrite = perf_counter()
+    print(f"Segmentation write took {t_imwrite - t_predict} seconds")
+    return t_imwrite - start
 
 
 def run_on_gpu():
@@ -123,6 +136,7 @@ def run_on_gpu():
     # runs inference on the image,
     # and writes segmentation.
     # Here, we just have to run gpu_filters_bin and time the execution.
+    print(f"Start GPU run. Calling `{gpu_filters_bin}`")
     start = perf_counter()
     subprocess.run([str(gpu_filters_bin)], check=True)
     end = perf_counter()
