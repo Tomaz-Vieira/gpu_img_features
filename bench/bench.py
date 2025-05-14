@@ -12,12 +12,13 @@ from sklearn.ensemble import RandomForestClassifier as ScikitForest
 from sklearn.tree import export_graphviz
 """
 Benchmarking script to compare inference on CPU to inference on GPU (in Rust).
-`working_dir` must contain ilastik features and labels export at `features_path` and `labels_path`.
+Run `cargo build --release` first to ensure the binary is at `./target/release/gpu_filters`.
+`working_dir` must contain features.npy and labels.npy.
 
-Trains a random forest, exports it to `working_dir/benchmark_trees`, and provides benchmark for 
-running inference with this forest on a random image in Python on CPU vs. using gpu_filters.
+Trains a random forest, exports it to `working_dir/out/benchmark_trees`, and prints timing for 
+running inference with this forest on the image at `inference_raw_path` in Python on CPU vs. using gpu_filters.
 
-Use the environment.yml in the project root to get the dependencies
+Use the environment.yml in the project root to get the dependencies (`conda env create -f environment.yml -n gpu_filters`)
 """
 
 working_dir = Path(__file__).parent  # ./bench
