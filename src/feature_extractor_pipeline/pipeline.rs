@@ -32,7 +32,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
         forest: &RandomForest,
         img_extent: wgpu::Extent3d,
     ) -> Self {
-        assert!(forest.highest_feature_idx() + 1 == kernels.len() * 3);
+        assert!(forest.highest_feature_idx() + 1 <= kernels.len() * 3);
         let input_texture_view_dimension = match img_extent.depth_or_array_layers {
             1 => wgpu::TextureViewDimension::D2,
             _ => wgpu::TextureViewDimension::D3,
