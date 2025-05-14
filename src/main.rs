@@ -98,7 +98,7 @@ fn main() {
 
 
     // let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
-    let img = image::io::Reader::open("./c_cells_1_big.png").unwrap().decode().unwrap();
+    let img = image::io::Reader::open("./bench/out/raw.tif").unwrap().decode().unwrap();
     let image = img.to_rgba8();
     
     // let img = image::io::Reader::open("./big2.png").unwrap().decode().unwrap();
@@ -165,5 +165,5 @@ fn main() {
         .collect::<Vec<_>>();
     let parsed = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, rgba_u8)
         .expect("Could not parse rgba u8 image!!!");
-    parsed.save(format!("predictions.png")).unwrap();
+    parsed.save(format!("./bench/out/segmentation_gpu.png")).unwrap();
 }
