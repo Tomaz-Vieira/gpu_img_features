@@ -98,7 +98,7 @@ fn main() {
 
 
     // let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
-    let img = image::io::Reader::open("./bench/out/raw.tif").unwrap().decode().unwrap();
+    let img = image::io::Reader::open("./c_cells_1_big_3ch.png").unwrap().decode().unwrap();
     let image = img.to_rgba8();
     
     // let img = image::io::Reader::open("./big2.png").unwrap().decode().unwrap();
