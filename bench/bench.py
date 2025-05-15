@@ -76,7 +76,7 @@ def get_training_data():
 
 def train_classifier(training_data):
     features, labels = training_data
-    clf = ScikitForest(random_state=seed, n_estimators=100)
+    clf = ScikitForest(random_state=seed, n_estimators=100, n_jobs=max_workers)
     clf.fit(features, labels)
     return clf
 
