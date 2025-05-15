@@ -17,7 +17,7 @@ Benchmarking script to compare inference on CPU to inference on GPU (in Rust).
 Trains a random forest, exports it to `working_dir/benchmark_trees`, and provides benchmark for 
 running inference with this forest on a random image in Python on CPU vs. using gpu_filters.
 
-To be run from a Python interpreter with an ilastik environment.
+Use the environment.yml in the project root to get the dependencies
 """
 
 working_dir = Path(__file__).parent  # ./bench

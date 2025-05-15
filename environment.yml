@@ -1,0 +1,10 @@
+name: gpu_stuff
+channels:
+  - ilastik-forge
+  - conda-forge
+dependencies:
+  - fastfilters
+  - scikit-learn
+  - scikit-image
+  - h5py
+  
