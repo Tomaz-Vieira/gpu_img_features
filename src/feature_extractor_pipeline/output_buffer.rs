@@ -139,7 +139,7 @@ impl<const KSIDE: usize> KernelsInBuffSlot<KSIDE> {
                             clamp(current_coords.x + offset.x, 0, texture_upper_limit.x),
                             clamp(current_coords.y + offset.y, 0, texture_upper_limit.y),
                         );
-                        let sample = textureLoad(input_image, sample_coords, 0).xyz;
+                        let sample = textureLoad(input_image, sample_coords, 0).xyz * 255.0;
                         {}
                         in_buf_kernels_offset += {num_kernels};
                     }}
@@ -148,7 +148,7 @@ impl<const KSIDE: usize> KernelsInBuffSlot<KSIDE> {
             self.kernels.iter().enumerate()
                 .map(|(k_idx, _kern)| format!("
                         //FIXME: ilastik features don't go from 0 to 1.0, but from 0.0 to 255.0, i think
-                        feature_{k_idx} += sample * {slot_name}[in_buf_kernels_offset + {k_idx}] * 255.0;"))
+                        feature_{k_idx} += sample * {slot_name}[in_buf_kernels_offset + {k_idx}];"))
                 .collect::<Vec<_>>()
                 .join("")
         )
