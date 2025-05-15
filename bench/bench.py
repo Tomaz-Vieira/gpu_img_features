@@ -5,19 +5,19 @@ from pathlib import Path
 from time import perf_counter, time
 
 import fastfilters as ff
-import h5py
 import imageio.v3 as iio
 import numpy
 from sklearn.ensemble import RandomForestClassifier as ScikitForest
 from sklearn.tree import export_graphviz
 """
 Benchmarking script to compare inference on CPU to inference on GPU (in Rust).
-`working_dir` must contain ilastik features and labels export at `features_path` and `labels_path`.
+Run `cargo build --release` first to ensure the binary is at `./target/release/gpu_filters`.
+`working_dir` must contain features.npy and labels.npy.
 
-Trains a random forest, exports it to `working_dir/benchmark_trees`, and provides benchmark for 
-running inference with this forest on a random image in Python on CPU vs. using gpu_filters.
+Trains a random forest, exports it to `working_dir/out/benchmark_trees`, and prints timing for 
+running inference with this forest on the image at `inference_raw_path` in Python on CPU vs. using gpu_filters.
 
-Use the environment.yml in the project root to get the dependencies
+Use the environment.yml in the project root to get the dependencies (`conda env create -f environment.yml -n gpu_filters`)
 """
 
 working_dir = Path(__file__).parent  # ./bench
@@ -50,6 +50,7 @@ def create_training_data():
     # Features: Gaussian smoothing with sigmas 0.3, 0.7, 0.9, 1.0, 1.6, 3.5, 4.0, 5.0, 7.0, 10.0
     # (0.9, 4.0, 7.0 added manually as these are not included by default in ilastik)
     # Exported Labels.
+    import h5py
     labels_path = working_dir.parent / "c_cells_1_Labels.h5"
     h5subpath = "exported_data"
     
@@ -75,7 +76,7 @@ def get_training_data():
 
 def train_classifier(training_data):
     features, labels = training_data
-    clf = ScikitForest(random_state=seed, n_estimators=100)
+    clf = ScikitForest(random_state=seed, n_estimators=100, n_jobs=max_workers)
     clf.fit(features, labels)
     return clf
 
@@ -113,19 +114,19 @@ def run_on_cpu(classifier):
 
     img = iio.imread(inference_raw_path)
     t_imread = perf_counter()
-    print(f"Image read took {t_imread - start} seconds")
+    print(f"Image read took {(t_imread - start):.4f} seconds")
     
     features = get_features(img)
     t_featurecomp = perf_counter()
-    print(f"Feature computation took {t_featurecomp - t_imread} seconds")
+    print(f"Feature computation took {(t_featurecomp - t_imread):.4f} seconds")
 
     prediction = classifier.predict(features)
     t_predict = perf_counter()
-    print(f"Prediction took {t_predict - t_featurecomp} seconds")
+    print(f"Prediction took {(t_predict - t_featurecomp):.4f} seconds")
 
     iio.imwrite(cpu_seg_output_path, prediction.reshape(img.shape[0], img.shape[1]))
     t_imwrite = perf_counter()
-    print(f"Segmentation write took {t_imwrite - t_predict} seconds")
+    print(f"Segmentation write took {(t_imwrite - t_predict):.4f} seconds")
     return t_imwrite - start
 
 
@@ -150,5 +151,5 @@ if __name__ == "__main__":
     export_classifier(classifier, [str(idx) for idx in range(num_classes)])
     cpu_time = run_on_cpu(classifier)
     gpu_time = run_on_gpu()
-    print(f"CPU time: {cpu_time:.2f} seconds")
-    print(f"GPU time: {gpu_time:.2f} seconds")
+    print(f"CPU time: {cpu_time:.4f} seconds")
+    print(f"GPU time: {gpu_time:.4f} seconds")
