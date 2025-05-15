@@ -85,10 +85,12 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
 
         let output_indexing = output_buffer_slot.wgsl_indexing_from_kernIdx_xyzOffset("global_id");
         write!(&mut code, "
-            if class_0_score > class_1_score {{
+            if class_0_score > class_1_score && class_0_score > class_2_score {{
                 {output_name}{output_indexing} = vec4(255.0, 0.0, 0.0, 1.0); //FIXME! hardcoded alpha channel!!
+            }} else if class_1_score > class_0_score && class_1_score > class_2_score {{
+                {output_name}{output_indexing} = vec4(0, 255.0, 0.0, 1.0); //FIXME! hardcoded alpha channel!!
             }} else {{
-                {output_name}{output_indexing} = vec4(0.0, 255.0, 0.0, 1.0); //FIXME! hardcoded alpha channel!!
+                {output_name}{output_indexing} = vec4(0.0, 0.0, 255.0, 1.0); //FIXME! hardcoded alpha channel!!
             }}"
         ).unwrap();
 

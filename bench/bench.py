@@ -124,9 +124,21 @@ def run_on_cpu(classifier):
     t_predict = perf_counter()
     print(f"Prediction took {(t_predict - t_featurecomp):.4f} seconds")
 
-    iio.imwrite(cpu_seg_output_path, prediction.reshape(img.shape[0], img.shape[1]))
+    prediction_img = prediction.reshape(img.shape[0], img.shape[1])
+    color_mapping = {
+        1: [255, 0, 0],
+        2: [0, 255, 0],
+        3: [0, 0, 255] 
+    }
+    rgb_image = numpy.zeros((*prediction_img.shape, 3), dtype=numpy.uint8)
+    for value, color in color_mapping.items():
+        rgb_image[prediction_img == value] = color
+    t_convert = perf_counter()
+    print(f"Converting prediction to RGB took {(t_convert - t_predict):.4f} seconds")
+
+    iio.imwrite(cpu_seg_output_path, rgb_image, mode="RGB")
     t_imwrite = perf_counter()
-    print(f"Segmentation write took {(t_imwrite - t_predict):.4f} seconds")
+    print(f"Segmentation write took {(t_imwrite - t_convert):.4f} seconds")
     return t_imwrite - start
 
 
