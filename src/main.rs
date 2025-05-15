@@ -6,12 +6,8 @@ pub mod decision_tree;
 use decision_tree::RandomForest;
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
 use pollster::FutureExt;
-use rand::RngCore;
-use util::{copy_bytes, timeit, ImageBufferExt, WorkgroupSize};
+use util::{timeit, ImageBufferExt, WorkgroupSize};
 use wgpu::Extent3d;
-
-use clap::Parser;
-
 
 fn make_pipeline<const KSIDE: usize>(
     forest: &RandomForest,
@@ -111,6 +107,9 @@ fn main() {
     //     const WIDTH: usize = 2048;
     //     const HEIGHT: usize = 2048;
     //     const NUM_CHANNELS: usize = 4; //FIXME
+    
+    //     use rand::RngCore;
+    //     use crate::util::copy_bytes;
 
     //     let mut rng = rand::rng();
     //     let mut test_source: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS * size_of::<f32>()];

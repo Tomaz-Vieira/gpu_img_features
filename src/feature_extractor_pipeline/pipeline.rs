@@ -1,12 +1,12 @@
 use std::fmt::Write;
-use std::time::Instant;
 
 use nalgebra::Vector4;
 use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
 use crate::decision_tree::RandomForest;
-use crate::util::{copy_bytes, timeit, Binding, Extent3dExt, Group, ImageBufferExt, MegsPerMs, WorkgroupSize};
+use crate::util::{timeit, Binding, Extent3dExt, Group, ImageBufferExt, WorkgroupSize};
 
+use super::download_buffer::DownloadBuffer;
 use super::input_texture::InputTextureSlot;
 use super::output_buffer::{KernelsInBuffSlot, OutputBufferSlot};
 use super::kernel::gaussian_blur::GaussianBlur;
@@ -171,12 +171,7 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
 
         //FIXME: hardcoding vec4, expecting it to always be a rgba image
         let output_buffer = self.output_buffer_slot.create_output_buffer(&self.device);
-        let read_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("read_buffer"),
-            mapped_at_creation: false,
-            size: output_buffer.size(),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        });
+        let download_buffer = DownloadBuffer::new_for_predictions(img, &self.device, Some("read_buffer"));
 
         let inout_binding_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("binding_for_filter_pipeline"),
@@ -208,37 +203,15 @@ impl<const KSIDE: usize> FeatureExtractorPipeline<KSIDE> {
             // drop(compute_pass); //FIXME?: forcing pass to end here, I hope
         }
 
-        command_encoder.copy_buffer_to_buffer(
-            &output_buffer,
-            0,
-            &read_buffer,
-            0,
-            output_buffer.size(),
-        );
+        download_buffer.issue_copy_from(&output_buffer, &mut command_encoder);
 
         self.queue.submit(Some(command_encoder.finish()));
 
-        let read_buffer_slice = read_buffer.slice(..);
+        let predictions_reader = download_buffer.map_async();
 
-        let start_of_map_async = Instant::now();
-        read_buffer_slice.map_async(wgpu::MapMode::Read, move |_| {
-            let time_until_mapping = Instant::now() - start_of_map_async;
-            eprintln!("Mapping the output buffer to CPU memory space (so, waiting for compute to finish?) took {time_until_mapping:?}");
-            //FIXME: check result and, if successul, set a condvar or something
-            // println!("buffer is mapped!");
-        });
+        self.device.poll(wgpu::PollType::wait()).unwrap(); //FIXME: do we even need this anymore with DownloadBuffer's channel?
 
-        self.device.poll(wgpu::PollType::wait()).unwrap();
-
-        // Gets contents of buffer
-
-        let out: Vec<[f32; 4]> = {
-            let read_buffer_view = read_buffer_slice.get_mapped_range();
-            let data_cpy: Vec<[f32; 4]> = copy_bytes(&read_buffer_view, "from GPU to cpu");
-            data_cpy
-        };
-
-        read_buffer.unmap();
-        Ok(out)
+        let (predictions, _download_buffer) = predictions_reader.readback();
+        Ok(predictions)
     }
 }
