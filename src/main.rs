@@ -156,7 +156,9 @@ fn main() {
 
                     {
                         use std::io::Write;
-                        let mut file = std::fs::File::create(format!("blurred_{height}y_{width}x_4c.bytes")).unwrap();
+                        let adapter_name = adapter.get_info().name.replace(" ", "_");
+                        
+                        let mut file = std::fs::File::create(format!("blurred_{height}y_{width}x_4c_float32.bytes_{adapter_name}")).unwrap();
                         let img_slice_bytes: &[u8] = bytemuck::cast_slice(img_slice);
                         eprintln!("Gonna write {} bytes", img_slice_bytes.len());
                         file.write_all(img_slice_bytes).unwrap();
