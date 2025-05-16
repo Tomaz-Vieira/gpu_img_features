@@ -4,12 +4,10 @@ pub mod wgsl;
 pub mod decision_tree;
 
 use std::time::Duration;
-use ndarray_npy::{ReadNpyError, WriteNpyExt, ReadNpyExt};
 
 // use decision_tree::RandomForest;
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
 use pollster::FutureExt;
-use rand::RngCore;
 use util::{ImageBufferExt, WorkgroupSize};
 
 fn main() {
@@ -73,24 +71,24 @@ fn main() {
     .block_on()
     .expect("Failed to create device");
 
-    let mut rng = rand::rng();
+    // let mut rng = rand::rng();
 
-    const WIDTH: usize = 1024;
-    const HEIGHT: usize = 1024;
-    const NUM_CHANNELS: usize = 4; //FIXME
-    const NUM_IMAGES: usize = 1;
+    // const WIDTH: usize = 1024;
+    // const HEIGHT: usize = 1024;
+    // const NUM_CHANNELS: usize = 4; //FIXME
+    // const NUM_IMAGES: usize = 1;
     const KERNEL_SIDE: usize = 41;
 
-    let images: Vec<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> = (0..NUM_IMAGES)
-        .map(|_| {
-            let mut bytes: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
-            rng.fill_bytes(&mut bytes);
-            image::ImageBuffer::from_raw(WIDTH as u32, HEIGHT as u32, bytes).unwrap()
-        })
-        .collect();
+    // let images: Vec<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> = (0..NUM_IMAGES)
+    //     .map(|_| {
+    //         let mut bytes: Vec<u8> = vec![0; WIDTH * HEIGHT * NUM_CHANNELS];
+    //         rng.fill_bytes(&mut bytes);
+    //         image::ImageBuffer::from_raw(WIDTH as u32, HEIGHT as u32, bytes).unwrap()
+    //     })
+    //     .collect();
 
-    // let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
-    // let img1_rgba8 = img.to_rgba8();
+    let img = image::io::Reader::open("./big.png").unwrap().decode().unwrap();
+    let img1_rgba8 = img.to_rgba8();
     
     // let img = image::io::Reader::open("./big2.png").unwrap().decode().unwrap();
     // let img2_rgba8 = img.to_rgba8();
@@ -98,11 +96,11 @@ fn main() {
     // let img = image::io::Reader::open("./big3.png").unwrap().decode().unwrap();
     // let img3_rgba8 = img.to_rgba8();
 
-    // let images = [
-    //     img1_rgba8,
-    //     img2_rgba8,
-    //     img3_rgba8,
-    // ];
+    let images = [
+        img1_rgba8,
+        // img2_rgba8,
+        // img3_rgba8,
+    ];
 
     let dims = images[0].dimensions();
     println!("Image has these dimensions:{:?} ", dims);
