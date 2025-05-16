@@ -4,15 +4,16 @@ pub mod wgsl;
 pub mod decision_tree;
 
 use std::time::Duration;
+use ndarray_npy::{ReadNpyError, WriteNpyExt, ReadNpyExt};
 
-use decision_tree::RandomForest;
+// use decision_tree::RandomForest;
 use feature_extractor_pipeline::{kernel::gaussian_blur::GaussianBlur, pipeline::FeatureExtractorPipeline};
 use pollster::FutureExt;
 use rand::RngCore;
 use util::{ImageBufferExt, WorkgroupSize};
 
 fn main() {
-    let forest: RandomForest = RandomForest::from_dir("./serialized_scikit_forests").unwrap();
+    // let forest: RandomForest = RandomForest::from_dir("./serialized_scikit_forests").unwrap();
 
     // wgpu uses `log` for all of our logging, so we initialize a logger with the `env_logger` crate.
     //
@@ -107,7 +108,7 @@ fn main() {
     println!("Image has these dimensions:{:?} ", dims);
 
     let kernels = vec![
-        GaussianBlur::<KERNEL_SIDE>{ sigma: 1.0 },
+        GaussianBlur::<KERNEL_SIDE>{ sigma: 10.0 },
         // GaussianBlur::<KERNEL_SIDE>{ sigma: 3.0 },
         // GaussianBlur::<KERNEL_SIDE>{ sigma: 5.0 },
         // GaussianBlur::<KERNEL_SIDE>{ sigma: 10.0 },
@@ -152,6 +153,15 @@ fn main() {
                     let height = input_img.height();
                     let num_pixels = (width * height) as usize;
                     let img_slice = &features[(kern_idx * num_pixels)..(kern_idx + 1) * num_pixels];
+
+                    {
+                        use std::io::Write;
+                        let mut file = std::fs::File::create(format!("blurred_{height}y_{width}x_4c.bytes")).unwrap();
+                        let img_slice_bytes: &[u8] = bytemuck::cast_slice(img_slice);
+                        eprintln!("Gonna write {} bytes", img_slice_bytes.len());
+                        file.write_all(img_slice_bytes).unwrap();
+                    }
+                    
                     let img_slice_f32: &[f32] = bytemuck::cast_slice(img_slice);
                     assert!(img_slice_f32.len() == num_pixels * 4);
 

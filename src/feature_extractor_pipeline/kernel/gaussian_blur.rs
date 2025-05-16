@@ -1,4 +1,4 @@
-use encase::nalgebra::Vector2;
+use nalgebra::Vector2;
 
 #[derive(Clone)]
 pub struct GaussianBlur<const KSIDE: usize>{

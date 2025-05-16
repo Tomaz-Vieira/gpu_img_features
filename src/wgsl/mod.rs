@@ -1,4 +1,4 @@
-use encase::nalgebra::{Vector2, Vector3, Vector4};
+use nalgebra::{Vector2, Vector3, Vector4};
 use paste::paste;
 
 pub mod buffer;

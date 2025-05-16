@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use encase::nalgebra::Vector3;
+use nalgebra::Vector3;
 
 use crate::util::WorkgroupSize;
 use crate::wgsl::buffer::OutputBuffer;

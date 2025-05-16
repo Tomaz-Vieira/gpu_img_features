@@ -2,7 +2,7 @@ use std::ops::Mul;
 use std::marker::PhantomData;
 use std::fmt::Display;
 
-use encase::nalgebra::{Vector2, Vector3, Vector4};
+use nalgebra::{Vector2, Vector3, Vector4};
 use paste::paste;
 
 use super::{FVec3, FVec4, IVec2, ShaderTypeExt, Wgsl};

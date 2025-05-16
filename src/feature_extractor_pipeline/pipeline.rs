@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use encase::nalgebra::Vector4;
+use nalgebra::Vector4;
 use wgpu::{BindGroupLayoutDescriptor, ShaderModuleDescriptor};
 
 use crate::util::{timeit, Binding, Extent3dExt, Group, ImageBufferExt, WorkgroupSize};
