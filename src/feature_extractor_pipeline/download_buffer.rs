@@ -30,6 +30,9 @@ impl DownloadBuffer<[f32; 4]>{
 }
 
 impl<T: bytemuck::AnyBitPattern> DownloadBuffer<T>{
+    pub fn inner(&self) -> &wgpu::Buffer{ //FIXME: make it accessible just OutputTexture ?
+        return &self.buffer
+    }
     pub fn new(device: &wgpu::Device, label: Option<&str>, count: usize) -> Self{
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label,

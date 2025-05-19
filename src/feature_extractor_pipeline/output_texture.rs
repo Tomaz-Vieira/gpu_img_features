@@ -3,6 +3,8 @@ use std::fmt::Display;
 
 use crate::util::{Binding, Group};
 
+use super::download_buffer::DownloadBuffer;
+
 pub struct OutputTextureSlot {
     name: String,
     group: Group,
@@ -27,7 +29,7 @@ impl OutputTextureSlot {
             view_dimension,
         };
     }
-    pub fn create_texture(&self, device: &wgpu::Device, size: wgpu::Extent3d) -> InputTexture {
+    pub fn create_texture(&self, device: &wgpu::Device, size: wgpu::Extent3d) -> OutputTexture {
         let name = &self.name;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(&format!("output_texture__{name}")),
@@ -40,7 +42,7 @@ impl OutputTextureSlot {
             view_formats: &[],
         });
         let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        return InputTexture {
+        return OutputTexture {
             texture,
             texture_view,
             binding: self.binding,
@@ -93,32 +95,36 @@ impl Display for OutputTextureSlot {
     }
 }
 
-pub struct InputTexture {
+pub struct OutputTexture {
     binding: Binding,
     texture: wgpu::Texture,
     texture_view: wgpu::TextureView,
 }
-impl InputTexture {
+impl OutputTexture {
     pub fn to_bind_group_entry(&self) -> wgpu::BindGroupEntry {
         wgpu::BindGroupEntry {
             binding: self.binding.into(),
             resource: wgpu::BindingResource::TextureView(&self.texture_view),
         }
     }
-    pub fn write_texture(&self, queue: &wgpu::Queue, image: &image::ImageBuffer<image::Rgba<u8>, Vec<u8>>) {
-        queue.write_texture(
-            self.texture.as_image_copy(),
-            image.as_raw(),
-            wgpu::TexelCopyBufferLayout {
-                bytes_per_row: Some(4 * image.width()),
-                rows_per_image: Some(image.height()),
-                offset: 0,
+    pub fn issue_readback(&self, encoder: &mut wgpu::CommandEncoder, dl_buffer: DownloadBuffer<[f32; 4]>){
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo{
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::default(),
+            },
+            wgpu::TexelCopyBufferInfo{
+                buffer: dl_buffer.inner(),
+                layout: wgpu::TexelCopyBufferLayout{
+                },
             },
             wgpu::Extent3d {
-                width: image.width(),
-                height: image.height(),
+                width: self.texture.width(),
+                height: self.texture.height(),
                 depth_or_array_layers: 1,
-            },
+            }
         )
     }
 }
